@@ -1,0 +1,79 @@
+"""services/qa/utils — shared helpers used by every QA worker/lead/head."""
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any, Dict, List, Optional
+
+
+def parse_llm_json(raw: str, fallback: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Strips markdown code fences and parses JSON from an LLM response.
+    Falls back to `fallback` (or {}) on any parse failure — never raises.
+    """
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            parts = cleaned.split("```")
+            cleaned = parts[1] if len(parts) > 1 else cleaned
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:]
+        return json.loads(cleaned.strip())
+    except Exception:
+        return fallback if fallback is not None else {}
+
+
+def idempotency_key(project_id: str, task_id: str, worker_agent_id: str) -> str:
+    """Deterministic key so re-running the same worker for the same task is detectable."""
+    raw = f"{project_id}:{task_id}:{worker_agent_id}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def defect_id_for(project_id: str, category: str, module_id: Optional[str]) -> str:
+    """Deterministic defect id so re-detecting the same failure doesn't create duplicates."""
+    raw = f"{project_id}:{category}:{module_id or 'unknown'}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def quality_gate(score: float, threshold: float = 0.7) -> bool:
+    return score >= threshold
+
+
+def exponential_backoff_seconds(retry_count: int, cap: int = 60) -> int:
+    return min(cap, 2 ** max(0, retry_count))
+
+
+def files_to_dicts(files: List[Any]) -> List[Dict[str, str]]:
+    out = []
+    for f in files:
+        if isinstance(f, dict):
+            out.append({"path": f["path"], "content": f["content"]})
+        else:
+            out.append({"path": f.path, "content": f.content})
+    return out
+
+
+def summarize_failures(items: List[Dict[str, Any]], key: str = "failure_reason") -> str:
+    reasons = [str(i.get(key)) for i in items if i.get(key)]
+    return "; ".join(reasons[:5]) if reasons else "no failure detail available"
+
+
+def severity_for_category(category: str) -> str:
+    """
+    Maps a failure category to a default DefectSeverity, per the spec's
+    Blocking / Warning condition split:
+      Blocking: build fails, migration fails, API contract breaks,
+                coverage below threshold, critical regression, test
+                infrastructure failure  -> critical/high
+      Warning:  minor perf regressions, doc inconsistencies, lint,
+                non-critical compatibility  -> medium/low
+    """
+    blocking = {
+        "build_failure": "critical",
+        "migration_failure": "critical",
+        "contract_break": "high",
+        "coverage_gap": "high",
+        "regression": "high",
+        "test_infrastructure_failure": "critical",
+    }
+    return blocking.get(category, "medium")
