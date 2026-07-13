@@ -270,6 +270,27 @@ async def approve_artifact(
     current_state  = state.values
     artifact_type  = current_state.get("approval_artifact_type", "unknown")
 
+    # Mark the most recent artifact of this type "approved" in the DB.
+    # Genuine orchestration gap found while implementing M3.6: nothing
+    # previously called ArtifactRepository.update_status here, so
+    # AgentContextBuilder._fetch_artifacts (which strictly filters on
+    # status == "approved") could never actually return the artifact
+    # that was just approved to the next department's agent run. Most
+    # visible for "deployment_plan": without this, DevOps's
+    # execute_deployment stage would never be able to re-fetch its own
+    # plan. Harmless no-op for "requirements"/"architecture" — those
+    # are conceptual labels, not literal Artifact.artifact_type values,
+    # so this lookup simply finds nothing for them, same as before.
+    from sqlalchemy import select as _select
+    from infrastructure.database.models import Artifact as _Artifact
+    _latest = (await db.execute(
+        _select(_Artifact)
+        .where(_Artifact.project_id == project_id, _Artifact.artifact_type == artifact_type)
+        .order_by(_Artifact.version.desc()).limit(1)
+    )).scalar_one_or_none()
+    if _latest is not None:
+        await ArtifactRepository.update_status(db, _latest.id, "approved", approved_by=user_id)
+
     # Inject approval into graph state
     _lifecycle_graph.update_state(config, {
         "approval_status":   "approved",
@@ -309,6 +330,21 @@ async def approve_artifact(
             project_id=project_id,
             task_type="run_engineering_pipeline",
             description="Run engineering pipeline after architecture approval",
+        )
+
+    # If it's deployment-plan approval, execute the actual deployment (M3.6).
+    # Genuine orchestration gap discovered while implementing DevOps Service:
+    # deployment_approval_gate_node/execute_deployment_phase_node in
+    # lifecycle.py already pause-and-resume the graph correctly, but nothing
+    # in this endpoint ever invoked devops_head a second time to run the
+    # post-approval half of its pipeline (deploy -> health check -> release) —
+    # the "requirements" and "architecture" branches above were the only two
+    # wired up. Documented in docs/M3.6_DevOps_Service_Handover.md.
+    elif artifact_type == "deployment_plan":
+        await _run_department_pipeline(
+            project_id=project_id,
+            task_type="execute_deployment",
+            description="Execute deployment after deployment plan approval",
         )
 
     return {
@@ -518,6 +554,13 @@ async def _run_department_pipeline(
                           "user_stories_doc", "acceptance_criteria"],
         "engineering":   ["architecture_blueprint", "openapi_spec", "database_schema",
                           "deployment_architecture", "ui_blueprint"],
+        # M3.6 — genuine orchestration gap: without this entry, devops_head's
+        # execute_deployment stage would silently fall back to the "product"
+        # default list above and never see qa_report/security_report/
+        # deployment_plan at all. See docs/M3.6_DevOps_Service_Handover.md.
+        "devops":        ["source_code", "qa_report", "security_report", "deployment_plan",
+                           "dockerfile", "docker_compose", "environment_config",
+                           "pipeline_config", "openapi_spec", "database_schema"],
     }
 
     try:

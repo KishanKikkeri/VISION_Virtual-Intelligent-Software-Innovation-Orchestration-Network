@@ -82,6 +82,7 @@ TASK_DEPARTMENT_MAP: Dict[str, str] = {
     "generate_dockerfiles":       "devops",
     "generate_cicd":              "devops",
     "deploy":                     "devops",
+    "execute_deployment":         "devops",
     # Docs
     "generate_docs":              "docs",
     "generate_readme":            "docs",
