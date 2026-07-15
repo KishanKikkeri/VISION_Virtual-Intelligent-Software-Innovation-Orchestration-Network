@@ -554,6 +554,17 @@ async def _run_department_pipeline(
                           "user_stories_doc", "acceptance_criteria"],
         "engineering":   ["architecture_blueprint", "openapi_spec", "database_schema",
                           "deployment_architecture", "ui_blueprint"],
+        # M3.9 — genuine orchestration gap, same class of bug as the devops
+        # entry below: services/qa/head/__init__.py and
+        # services/security/head/__init__.py both declare
+        # REQUIRED_ENGINEERING_ARTIFACTS = ("source_code",) and read it via
+        # task.context.get_artifact("source_code", {}) — but with no "qa"/
+        # "security" entry here, a Manager-delegated QA or Security task
+        # fell back to the "product" default list (feature_spec_doc etc.)
+        # and never received source_code at all. See
+        # docs/M3.9_Platform_Integration_Handover.md.
+        "qa":            ["source_code"],
+        "security":      ["source_code"],
         # M3.6 — genuine orchestration gap: without this entry, devops_head's
         # execute_deployment stage would silently fall back to the "product"
         # default list above and never see qa_report/security_report/
