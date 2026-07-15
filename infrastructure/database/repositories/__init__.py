@@ -10,7 +10,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from infrastructure.database.models import (
     Agent, AgentRun, Approval, Artifact, AuditEvent,
-    BudgetLimit, Project, TokenLedger, User, Workflow, WorkflowPhase,
+    Branch, BudgetLimit, Project, PullRequest, Repository, RepositoryEvent,
+    TokenLedger, User, Workflow, WorkflowPhase,
 )
 
 class ProjectRepository:
@@ -162,3 +163,148 @@ class UserRepository:
     async def get_by_id(db, user_id):
         r = await db.execute(select(User).where(User.id == user_id))
         return r.scalar_one_or_none()
+
+
+# ═══════════════════════════════════════════════════════════════
+# M3.2 — REPOSITORY SERVICE REPOSITORIES
+# ═══════════════════════════════════════════════════════════════
+
+class RepositoryRepository:
+    @staticmethod
+    async def create(db, project_id, provider, owner, name, full_name,
+                     default_branch="main", clone_url=None, html_url=None,
+                     visibility="private", provider_repo_id=None, metadata=None):
+        row = Repository(project_id=project_id, provider=provider, owner=owner,
+                         name=name, full_name=full_name, default_branch=default_branch,
+                         clone_url=clone_url, html_url=html_url, visibility=visibility,
+                         status="active", provider_repo_id=provider_repo_id,
+                         metadata_=metadata or {})
+        db.add(row)
+        await db.flush()
+        return row
+
+    @staticmethod
+    async def get_by_id(db, repository_id):
+        r = await db.execute(select(Repository).where(Repository.id == repository_id))
+        return r.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_project(db, project_id):
+        r = await db.execute(select(Repository).where(Repository.project_id == project_id))
+        return r.scalar_one_or_none()
+
+    @staticmethod
+    async def update_status(db, repository_id, status):
+        await db.execute(update(Repository).where(Repository.id == repository_id)
+                         .values(status=status, updated_at=datetime.utcnow()))
+
+
+class BranchRepository:
+    @staticmethod
+    async def create(db, repository_id, name, branch_type="feature", task_id=None,
+                     base_branch="develop", head_sha=None, is_protected=False,
+                     created_by="VISION Bot"):
+        row = Branch(repository_id=repository_id, name=name, branch_type=branch_type,
+                     task_id=task_id, base_branch=base_branch, head_sha=head_sha,
+                     is_protected=is_protected, status="active", created_by=created_by)
+        db.add(row)
+        await db.flush()
+        return row
+
+    @staticmethod
+    async def get_by_name(db, repository_id, name):
+        r = await db.execute(select(Branch).where(Branch.repository_id == repository_id,
+                                                   Branch.name == name))
+        return r.scalar_one_or_none()
+
+    @staticmethod
+    async def list_for_repository(db, repository_id, status=None):
+        stmt = select(Branch).where(Branch.repository_id == repository_id)
+        if status:
+            stmt = stmt.where(Branch.status == status)
+        r = await db.execute(stmt.order_by(Branch.created_at.desc()))
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def update_head(db, branch_id, head_sha):
+        await db.execute(update(Branch).where(Branch.id == branch_id).values(head_sha=head_sha))
+
+    @staticmethod
+    async def mark_merged(db, branch_id):
+        await db.execute(update(Branch).where(Branch.id == branch_id)
+                         .values(status="merged", merged_at=datetime.utcnow()))
+
+    @staticmethod
+    async def mark_deleted(db, branch_id):
+        await db.execute(update(Branch).where(Branch.id == branch_id)
+                         .values(status="deleted", deleted_at=datetime.utcnow()))
+
+
+class PullRequestRepository:
+    @staticmethod
+    async def create(db, repository_id, title, source_branch, target_branch="develop",
+                     description=None, task_id=None, provider_pr_number=None,
+                     reviewers=None, html_url=None, merge_strategy="squash"):
+        row = PullRequest(repository_id=repository_id, title=title,
+                          source_branch=source_branch, target_branch=target_branch,
+                          description=description, task_id=task_id,
+                          provider_pr_number=provider_pr_number,
+                          reviewers=reviewers or [], html_url=html_url,
+                          merge_strategy=merge_strategy, status="open")
+        db.add(row)
+        await db.flush()
+        return row
+
+    @staticmethod
+    async def get_by_id(db, pull_request_id):
+        r = await db.execute(select(PullRequest).where(PullRequest.id == pull_request_id))
+        return r.scalar_one_or_none()
+
+    @staticmethod
+    async def list_for_repository(db, repository_id, status=None):
+        stmt = select(PullRequest).where(PullRequest.repository_id == repository_id)
+        if status:
+            stmt = stmt.where(PullRequest.status == status)
+        r = await db.execute(stmt.order_by(PullRequest.opened_at.desc()))
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def mark_approved(db, pull_request_id):
+        await db.execute(update(PullRequest).where(PullRequest.id == pull_request_id)
+                         .values(status="approved", approved_at=datetime.utcnow()))
+
+    @staticmethod
+    async def mark_merged(db, pull_request_id, merge_sha):
+        await db.execute(update(PullRequest).where(PullRequest.id == pull_request_id)
+                         .values(status="merged", merge_sha=merge_sha, merged_at=datetime.utcnow()))
+
+    @staticmethod
+    async def mark_closed(db, pull_request_id):
+        await db.execute(update(PullRequest).where(PullRequest.id == pull_request_id)
+                         .values(status="closed", closed_at=datetime.utcnow()))
+
+    @staticmethod
+    async def mark_conflicted(db, pull_request_id):
+        await db.execute(update(PullRequest).where(PullRequest.id == pull_request_id)
+                         .values(status="conflicted"))
+
+
+class RepositoryEventRepository:
+    """APPEND-ONLY. No UPDATE or DELETE permitted."""
+
+    @staticmethod
+    async def record(db, event_type, repository_id=None, project_id=None,
+                     entity_type=None, entity_id=None, actor="VISION Bot", payload=None):
+        row = RepositoryEvent(repository_id=repository_id, project_id=project_id,
+                              event_type=event_type, entity_type=entity_type,
+                              entity_id=entity_id, actor=actor, payload=payload or {})
+        db.add(row)
+        await db.flush()
+        return row.id
+
+    @staticmethod
+    async def list_for_repository(db, repository_id, limit=100):
+        r = await db.execute(
+            select(RepositoryEvent).where(RepositoryEvent.repository_id == repository_id)
+            .order_by(RepositoryEvent.recorded_at.desc()).limit(limit))
+        return list(r.scalars().all())
