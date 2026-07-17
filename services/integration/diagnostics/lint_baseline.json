@@ -1,0 +1,9 @@
+{
+  "_comment": "Findings accepted as pre-existing debt when LINT-E007 was introduced in M3.10's CI/quality-gates follow-up. Same class of bug as the QA `dlq` node (fixed in M3.10) — a routing function written and imported but never wired into add_conditional_edges — but these 4 were not flagged as 'known genuine issues' in the M3.10 spec, so they were not independently investigated/fixed here. Remove an entry from this list once its function is either wired in or its unused import is removed; do not add new entries without investigating whether the function is a genuine bug first, the way the dlq node was.",
+  "accepted_findings": [
+    {"workflow": "engineering", "rule_id": "LINT-E007", "node": "route_after_aggregate"},
+    {"workflow": "security", "rule_id": "LINT-E007", "node": "route_after_fan_out"},
+    {"workflow": "qa", "rule_id": "LINT-E007", "node": "route_after_coverage"},
+    {"workflow": "qa", "rule_id": "LINT-E007", "node": "route_after_execute"}
+  ]
+}

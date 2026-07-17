@@ -12,10 +12,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import structlog
 from pydantic import BaseModel, Field
 
 from core.config.settings import get_settings
 from core.runtime.factory import AGENT_REGISTRY
+
+log = structlog.get_logger(__name__)
 
 
 class StartupCheck(BaseModel):
@@ -84,6 +87,38 @@ def _check_workflow_registration() -> StartupCheck:
     return StartupCheck(name="workflow_registration", passed=True, detail=f"{len(results)} graphs built")
 
 
+def _check_workflow_diagnostics() -> StartupCheck:
+    """M3.10 §4 Startup Validation: runs the richer workflow_validator
+    over every registered LangGraph and logs a per-workflow ✓/WARNING
+    line. Diagnostics issues (unreachable nodes, missing END, missing
+    START, invalid route targets) never fail startup — this check's
+    `passed` reflects whether the diagnostics *ran*, not whether every
+    workflow is perfectly clean; a workflow with warnings still counts
+    as a successful check here (see StartupReport.checks vs. the
+    granular per-workflow detail logged alongside it)."""
+    from services.integration.validators.workflow_validator import validate_all_workflows_detailed
+
+    try:
+        reports = validate_all_workflows_detailed()
+    except Exception as e:
+        return StartupCheck(name="workflow_diagnostics", passed=False, detail=f"diagnostics crashed: {e}")
+
+    for name, report in reports.items():
+        if report.healthy and not report.warnings:
+            log.info("workflow_diagnostics_check", workflow=name, status="ok")
+        else:
+            issues = report.errors + report.warnings
+            log.warning("workflow_diagnostics_check", workflow=name, status="warning", issues=issues)
+
+    unhealthy = [name for name, r in reports.items() if not r.healthy]
+    detail = f"{len(reports)} workflows checked"
+    if unhealthy:
+        detail += f"; unhealthy: {unhealthy}"
+    # Always passes (diagnostics ran successfully) — startup must
+    # continue regardless of individual workflow health per spec §4.
+    return StartupCheck(name="workflow_diagnostics", passed=True, detail=detail)
+
+
 async def _check_migrations(db_factory: Any) -> StartupCheck:
     if db_factory is None:
         return StartupCheck(name="db_migrations", passed=False, detail="no db_factory configured")
@@ -135,6 +170,7 @@ async def run_startup_checks(
         _check_ports(),
         _check_agent_registry(),
         _check_workflow_registration(),
+        _check_workflow_diagnostics(),
         _check_nats_subjects(),
         _check_artifact_registry(),
         await _check_migrations(db_factory),

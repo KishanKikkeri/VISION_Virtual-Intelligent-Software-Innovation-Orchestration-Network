@@ -11,10 +11,12 @@ Run:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config.settings import get_settings
 from core.runtime.factory import AgentFactory
@@ -87,6 +89,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AASC Platform Integration Service", version="1.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
+
+# Developer Experience — web-based workflow explorer (searchable graphs +
+# execution traces + architecture/dependency dashboard). Static, no build
+# step: fetches its data live from the /platform/* API above.
+_STATIC_DIR = Path(__file__).parent / "static"
+_DOCS_WORKFLOWS_DIR = Path(__file__).resolve().parents[2] / "docs" / "workflows"
+if _STATIC_DIR.exists():
+    app.mount("/explorer", StaticFiles(directory=str(_STATIC_DIR / "explorer"), html=True), name="explorer")
+if _DOCS_WORKFLOWS_DIR.exists():
+    app.mount("/docs/workflows", StaticFiles(directory=str(_DOCS_WORKFLOWS_DIR)), name="workflow-docs")
 
 
 if __name__ == "__main__":
