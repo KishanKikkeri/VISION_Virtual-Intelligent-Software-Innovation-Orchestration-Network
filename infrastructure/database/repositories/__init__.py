@@ -102,6 +102,25 @@ class ArtifactRepository:
         if approved_by: vals["approved_by"] = approved_by
         await db.execute(update(Artifact).where(Artifact.id == artifact_id).values(**vals))
 
+    @staticmethod
+    async def list_versions_for_type(db, project_id, artifact_type):
+        """M4.2: every version of one artifact_type for a project, oldest
+        first — the sequence services.integration.replay.artifact_diff
+        compares two points along."""
+        r = await db.execute(
+            select(Artifact).where(Artifact.project_id == project_id,
+                                    Artifact.artifact_type == artifact_type)
+            .order_by(Artifact.version.asc()))
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def get_version(db, project_id, artifact_type, version):
+        r = await db.execute(
+            select(Artifact).where(Artifact.project_id == project_id,
+                                    Artifact.artifact_type == artifact_type,
+                                    Artifact.version == version))
+        return r.scalar_one_or_none()
+
 
 class AuditRepository:
     @staticmethod
@@ -120,6 +139,39 @@ class AuditRepository:
         r = await db.execute(
             select(AuditEvent).where(AuditEvent.project_id == project_id)
             .order_by(AuditEvent.recorded_at.desc()).limit(limit))
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def list_for_project_ascending(db, project_id, limit=1000):
+        """M4.2: oldest-first ordering for execution_timeline/replay_engine,
+        which need to walk a project's history forward in time. Kept
+        separate from list_for_project (used by /platform/traces, which
+        wants most-recent-first) rather than adding an order_by param
+        that would change that endpoint's existing, relied-upon order."""
+        r = await db.execute(
+            select(AuditEvent).where(AuditEvent.project_id == project_id)
+            .order_by(AuditEvent.recorded_at.asc()).limit(limit))
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def list_recent(db, limit=200, event_type_prefix=None):
+        """M4.3: platform-wide (not one project's) most-recent-first
+        event read, for the Live Operations Dashboard's Event Stream
+        card. Every other AuditRepository method here is scoped to a
+        single project_id; the dashboard is the first caller that
+        genuinely needs "what happened anywhere on the platform,
+        recently" rather than "what happened on project X" — so this
+        is a new, additive method rather than a change to any existing
+        one's filtering behavior. `event_type_prefix` gives an
+        index-friendly category filter (dashboard_builder.
+        categorize_event_type's convention: the first dot-segment of
+        event_type) without loading every row and filtering in Python."""
+        stmt = select(AuditEvent).order_by(AuditEvent.recorded_at.desc()).limit(limit)
+        if event_type_prefix:
+            stmt = select(AuditEvent).where(
+                AuditEvent.event_type.like(f"{event_type_prefix}.%") | (AuditEvent.event_type == event_type_prefix)
+            ).order_by(AuditEvent.recorded_at.desc()).limit(limit)
+        r = await db.execute(stmt)
         return list(r.scalars().all())
 
 
