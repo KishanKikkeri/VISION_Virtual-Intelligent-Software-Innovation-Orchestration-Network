@@ -212,7 +212,7 @@ def build_repository_graph(deps: RepositoryDeps, checkpointer=None):
             ))
             return _ok(
                 state, branch_name=branch.name, _failed_step="create_branch",
-                nats_events_queue=[{"subject": "branch.created",
+                nats_events_queue=[{"subject": "repository.branch.created",
                                     "payload": {"project_id": state["project_id"],
                                                 "branch_name": branch.name}}],
             )
@@ -239,7 +239,7 @@ def build_repository_graph(deps: RepositoryDeps, checkpointer=None):
             ))
             return _ok(
                 state, commit_sha=commit.sha, _failed_step="commit",
-                nats_events_queue=[{"subject": "commit.created",
+                nats_events_queue=[{"subject": "repository.commit.created",
                                     "payload": {"project_id": state["project_id"],
                                                 "sha": commit.sha}}],
             )
@@ -261,7 +261,7 @@ def build_repository_graph(deps: RepositoryDeps, checkpointer=None):
             return _ok(
                 state, pull_request_id=pr.id, provider_pr_number=pr.provider_pr_number,
                 awaiting_approval=True, _failed_step="open_pr",
-                nats_events_queue=[{"subject": "pr.created",
+                nats_events_queue=[{"subject": "repository.pr.created",
                                     "payload": {"project_id": state["project_id"],
                                                 "pull_request_id": pr.id}}],
             )
@@ -295,7 +295,7 @@ def build_repository_graph(deps: RepositoryDeps, checkpointer=None):
             return _ok(
                 state, merge_sha=merged.merge_sha, awaiting_approval=False,
                 _failed_step="merge",
-                nats_events_queue=[{"subject": "pr.merged",
+                nats_events_queue=[{"subject": "repository.pr.merged",
                                     "payload": {"project_id": state["project_id"],
                                                 "merge_sha": merged.merge_sha}}],
             )
@@ -312,7 +312,7 @@ def build_repository_graph(deps: RepositoryDeps, checkpointer=None):
             ))
             return _ok(
                 state, _failed_step="release",
-                nats_events_queue=[{"subject": "release.created",
+                nats_events_queue=[{"subject": "repository.release.created",
                                     "payload": {"project_id": state["project_id"],
                                                 "tag_name": release.tag_name}}],
             )

@@ -3,15 +3,29 @@ services/monitoring/api/events.py
 =================================
 NATS event bindings for Monitoring Service, per spec §10.
 
-Subscribes:
-  engineering.phase.completed  qa.phase.completed
-  security.phase.completed     devops.phase.completed
-  repository.>  manager.>  agent.>  system.>
+Subscribes (messaging cleanup, see docs/M3.9_Platform_Integration_
+Handover.md §6 and the follow-up cleanup pass): a `.>` wildcard per
+department, consumed purely for cross-department visibility — this
+single mechanism now covers every `*.phase.completed`/`*.phase.
+started`/`*.phase.failed` event across Architecture/Engineering/QA/
+Security/DevOps, QA's `qa.defect.created`/`qa.retry.requested`,
+Security's `security.retry.requested`, and Incident Response's own
+`incident.*` events, all of which the M3.9 platform-integration audit
+found had zero consumers. (Those events don't drive any control flow —
+Manager's own `services/manager/graphs/lifecycle.py::engineering_rework_node`
+already handles the QA/Security rework loop synchronously from the
+delegation result, not by consuming these NATS events — so this
+wildcard subscription is the *correct* fix, not a workaround: these
+events are genuinely fire-and-forget observability signals, and now
+they're actually observed.)
+
+  architecture.>  engineering.>  qa.>  security.>  devops.>  incident.>
+  repository.>     manager.>       agent.>  system.>
 
 None of these drive Monitoring's own cycle (that's the scheduler in
 main.py, spec §7) — they're recorded as `logs` rows so a failed phase
-is visible on the platform_overview dashboard between cycles, and so a
-future M3.8 Incident Response Service has a single place
+is visible on the platform_overview dashboard between cycles, and so
+the Incident Response Service has a single place
 (`services/monitoring/integration/monitoring_repository.py`'s
 MonitoringLogRepository) to look for "what else was happening around
 the time of this incident."
@@ -32,13 +46,14 @@ from infrastructure.messaging.nats_client import NATSClient
 log = structlog.get_logger(__name__)
 
 # Wide, low-cardinality subjects consumed just for cross-department
-# visibility — one shared handler per phase.completed style, one
-# catch-all for each `.>` prefix.
-_PHASE_SUBJECTS = (
-    "engineering.phase.completed", "qa.phase.completed",
-    "security.phase.completed", "devops.phase.completed",
+# visibility — one `.>` wildcard per department (plus the original
+# infrastructure-level repository/manager/agent/system prefixes).
+# Monitoring intentionally does NOT subscribe to its own "monitoring.>"
+# — no service needs to observe itself this way.
+_WILDCARD_SUBJECTS = (
+    "architecture.>", "engineering.>", "qa.>", "security.>", "devops.>", "incident.>",
+    "repository.>", "manager.>", "agent.>", "system.>",
 )
-_WILDCARD_SUBJECTS = ("repository.>", "manager.>", "agent.>", "system.>")
 
 
 async def setup_monitoring_subscriptions(nats: NATSClient, db_factory=None) -> None:
@@ -54,26 +69,18 @@ async def setup_monitoring_subscriptions(nats: NATSClient, db_factory=None) -> N
         except Exception as e:
             log.warning("monitoring_event_record_failed", error=str(e))
 
-    async def phase_completed_handler(subject: str, payload: Dict[str, Any]) -> None:
-        department = subject.split(".")[0]
-        passed = payload.get("passed", True)
-        await _record(
-            department, "info" if passed else "warning",
-            f"{department}.phase.completed (passed={passed})", payload,
-        )
-
     async def wildcard_handler(subject: str, payload: Dict[str, Any]) -> None:
         department = subject.split(".")[0]
-        await _record(department, "debug", subject, payload)
-
-    for subject in _PHASE_SUBJECTS:
-        async def _handler(payload: Dict[str, Any], _subject: str = subject) -> None:
-            await phase_completed_handler(_subject, payload)
-        await nats.subscribe(subject, _handler, durable=f"monitoring-{subject.replace('.', '-')}")
+        if subject.endswith(".phase.completed") or subject.endswith(".phase.failed"):
+            passed = payload.get("passed", not subject.endswith(".phase.failed"))
+            level = "info" if passed else "warning"
+        else:
+            level = "debug"
+        await _record(department, level, subject, payload)
 
     for prefix in _WILDCARD_SUBJECTS:
         async def _handler(payload: Dict[str, Any], _prefix: str = prefix) -> None:
             await wildcard_handler(_prefix, payload)
         await nats.subscribe(prefix, _handler, durable=f"monitoring-{prefix.replace('.', '-').replace('>', 'all')}")
 
-    log.info("monitoring_subscriptions_ready")
+    log.info("monitoring_subscriptions_ready", wildcard_count=len(_WILDCARD_SUBJECTS))

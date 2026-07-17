@@ -11,9 +11,17 @@ Subscribes (per the M3.2 handover):
 Publishes (all emitted by AuditManager.record_and_publish — see
 managers/audit_manager.py — so every publish is paired with an
 append-only repository_events row):
-  repository.created   branch.created   commit.created
-  pr.created            pr.approved      pr.merged
-  release.created        release.rollback
+  repository.created         repository.branch.created
+  repository.commit.created  repository.pr.created
+  repository.pr.approved     repository.pr.merged
+  repository.release.created repository.release.rollback
+
+(Namespaced under `repository.*` as of the M3.9 messaging cleanup —
+these previously published un-namespaced, e.g. "branch.created", which
+meant they silently never matched Monitoring's `repository.>` wildcard
+consumer despite looking like they should. See
+docs/M3.9_Platform_Integration_Handover.md §6 and the messaging-cleanup
+follow-up for the full history.)
 """
 from __future__ import annotations
 

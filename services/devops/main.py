@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     if nats_client is not None:
         try:
-            await setup_devops_subscriptions(nats_client, runner=None, approved_runner=None)
+            await setup_devops_subscriptions(nats_client, runner=None)
         except Exception as e:
             log.warning("devops_subscriptions_setup_failed", error=str(e))
 

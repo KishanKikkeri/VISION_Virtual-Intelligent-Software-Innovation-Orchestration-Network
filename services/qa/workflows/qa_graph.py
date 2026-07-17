@@ -102,6 +102,24 @@ async def generate_integration_node(state: QAState) -> Dict[str, Any]:
     return {"integration_ready": True}
 
 
+async def generate_complete_node(state: QAState) -> Dict[str, Any]:
+    """Join point for the Unit/Integration test-generation fan-out —
+    mirrors services/engineering/workflows/engineering_graph.py's
+    aggregate_results join. Gives `route_after_generate` a place to
+    check `any_dead_lettered` *before* fanning out to the execute
+    stage, so tasks that exhausted their retries (see
+    services/qa/routing.route_task_retry's "dead_letter" outcome) are
+    routed to the `dlq` node instead of silently proceeding."""
+    log.info("qa_graph_generate_complete", project_id=state["project_id"],
+             any_dead_lettered=state.get("any_dead_lettered", False))
+    return {}
+
+
+async def fan_out_execute_node(state: QAState) -> Dict[str, Any]:
+    log.info("qa_graph_fan_out_execute", project_id=state["project_id"])
+    return {}
+
+
 async def execute_regression_node(state: QAState) -> Dict[str, Any]:
     return {"regression_ready": True}
 
@@ -214,6 +232,8 @@ def build_qa_graph(checkpointer=None):
     g.add_node("fan_out_generate",       fan_out_generate_node)
     g.add_node("generate_unit",          generate_unit_node)
     g.add_node("generate_integration",   generate_integration_node)
+    g.add_node("generate_complete",      generate_complete_node)
+    g.add_node("fan_out_execute",        fan_out_execute_node)
     g.add_node("execute_regression",     execute_regression_node)
     g.add_node("execute_performance",    execute_performance_node)
     g.add_node("coverage_analysis",      coverage_analysis_node)
@@ -234,10 +254,16 @@ def build_qa_graph(checkpointer=None):
 
     g.add_edge("fan_out_generate", "generate_unit")
     g.add_edge("fan_out_generate", "generate_integration")
-    g.add_edge("generate_unit",        "execute_regression")
-    g.add_edge("generate_integration", "execute_regression")
-    g.add_edge("generate_unit",        "execute_performance")
-    g.add_edge("generate_integration", "execute_performance")
+    g.add_edge("generate_unit",        "generate_complete")
+    g.add_edge("generate_integration", "generate_complete")
+
+    g.add_conditional_edges("generate_complete", route_after_generate, {
+        "execute": "fan_out_execute",
+        "dlq":     "dlq",
+        "failed":  "handle_failure",
+    })
+    g.add_edge("fan_out_execute", "execute_regression")
+    g.add_edge("fan_out_execute", "execute_performance")
 
     g.add_edge("execute_regression",  "coverage_analysis")
     g.add_edge("execute_performance", "coverage_analysis")

@@ -41,13 +41,13 @@ class PullRequestStatus(str, Enum):
 
 class RepositoryEventType(str, Enum):
     REPOSITORY_CREATED = "repository.created"
-    BRANCH_CREATED      = "branch.created"
-    COMMIT_CREATED      = "commit.created"
-    PR_CREATED          = "pr.created"
-    PR_APPROVED         = "pr.approved"
-    PR_MERGED           = "pr.merged"
-    RELEASE_CREATED     = "release.created"
-    RELEASE_ROLLBACK    = "release.rollback"
+    BRANCH_CREATED      = "repository.branch.created"
+    COMMIT_CREATED      = "repository.commit.created"
+    PR_CREATED          = "repository.pr.created"
+    PR_APPROVED         = "repository.pr.approved"
+    PR_MERGED           = "repository.pr.merged"
+    RELEASE_CREATED     = "repository.release.created"
+    RELEASE_ROLLBACK    = "repository.release.rollback"
 
 
 # ── Commit metadata (embedded in every VISION Bot commit) ───────
