@@ -1,0 +1,281 @@
+version: "3.9"
+
+# ============================================================
+# AASC — Docker Compose v1
+# Runs the complete Phase 1 infrastructure stack.
+#
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose logs -f demo   # stream demo app logs
+#   docker compose down -v        # stop and remove volumes
+#
+# Health checks: every service has one.
+# Services start in dependency order automatically.
+# ============================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: aasc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       aasc
+      POSTGRES_USER:     aasc
+      POSTGRES_PASSWORD: aasc_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aasc -d aasc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+
+  # ── NATS JetStream ─────────────────────────────────────────
+  nats:
+    image: nats:2.10-alpine
+    container_name: aasc-nats
+    restart: unless-stopped
+    command:
+      - "--jetstream"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      - "--max_file_store=1GB"
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # monitoring
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  # ── Qdrant ────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: aasc-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:6333/readyz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    logging: *default-logging
+
+  # ── Redis ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aasc-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  # ── Prometheus ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: aasc-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ── Grafana ───────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: aasc-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: aasc_admin
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ── Manager Service (W01 Lifecycle + W12 Delegation) ───────
+  # Orchestrates Product → Architecture → Engineering via
+  # AgentFactory; owns approval gates and budget enforcement.
+  manager:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: aasc-manager
+    restart: unless-stopped
+    command: ["uvicorn", "services.manager.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:         postgresql+asyncpg://aasc:aasc_password@postgres:5432/aasc
+      NATS_URL:             nats://nats:4222
+      QDRANT_URL:           http://qdrant:6333
+      JWT_SECRET:           dev_jwt_secret_change_in_prod
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-anthropic}
+      DEFAULT_LLM_MODEL:    ${DEFAULT_LLM_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_API_KEY:    ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY:       ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY:       ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY:   ${OPENROUTER_API_KEY:-}
+      STORAGE_BACKEND:      local
+      STORAGE_LOCAL_PATH:   /app/data/artifacts
+      LOG_LEVEL:            INFO
+      APP_ENV:              development
+    ports:
+      - "8001:8001"
+    volumes:
+      - artifact_data:/app/data/artifacts
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    logging: *default-logging
+
+  # ── Repository Service (M3.2 — Git abstraction layer) ──────
+  # The only service allowed to talk to GitHub. Engineering's
+  # commit_worker reaches this over HTTP, never Git directly.
+  repository:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: aasc-repository
+    restart: unless-stopped
+    command: ["uvicorn", "services.repository.main:app", "--host", "0.0.0.0", "--port", "8006"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:        postgresql+asyncpg://aasc:aasc_password@postgres:5432/aasc
+      NATS_URL:            nats://nats:4222
+      JWT_SECRET:          dev_jwt_secret_change_in_prod
+      # GITHUB_TOKEN unset → GitHubProvider falls back to a mocked
+      # provider for local validation runs. Set it for a real GitHub run.
+      GITHUB_TOKEN:        ${GITHUB_TOKEN:-}
+      GITHUB_API_BASE_URL: ${GITHUB_API_BASE_URL:-https://api.github.com}
+      GITHUB_DEFAULT_OWNER: ${GITHUB_DEFAULT_OWNER:-}
+      LOG_LEVEL:           INFO
+      APP_ENV:             development
+    ports:
+      - "8006:8006"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8006/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    logging: *default-logging
+
+  # ── Demo App (Phase 1 integration test) ───────────────────
+  demo:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: aasc-demo
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:         postgresql+asyncpg://aasc:aasc_password@postgres:5432/aasc
+      NATS_URL:             nats://nats:4222
+      QDRANT_URL:           http://qdrant:6333
+      JWT_SECRET:           dev_jwt_secret_change_in_prod
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-anthropic}
+      DEFAULT_LLM_MODEL:    ${DEFAULT_LLM_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_API_KEY:    ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY:       ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY:       ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY:   ${OPENROUTER_API_KEY:-}
+      OLLAMA_BASE_URL:      http://host.docker.internal:11434
+      STORAGE_BACKEND:      local
+      STORAGE_LOCAL_PATH:   /app/data/artifacts
+      LOG_LEVEL:            INFO
+      APP_ENV:              development
+    ports:
+      - "8000:8000"
+    volumes:
+      - artifact_data:/app/data/artifacts
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  nats_data:
+  qdrant_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  artifact_data:
