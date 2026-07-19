@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AASC — Live Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #10151f;
+    --panel-2: #161d2b;
+    --line: #22293a;
+    --text: #d7dce4;
+    --muted: #7c8698;
+    --cyan: #39bae9;
+    --green: #7fd962;
+    --amber: #ffb454;
+    --red: #f26d78;
+    --violet: #a48cf2;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  /* ── Top bar: the signature element — a live readiness pulse strip ── */
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { font-family: var(--mono); font-weight: 700; letter-spacing: 0.04em; font-size: 15px; }
+  .brand small { display:block; color: var(--muted); font-weight: 400; font-size: 10.5px; letter-spacing: 0.08em; margin-top: 2px;}
+  .pulse-strip {
+    flex: 1; height: 26px; border-radius: 3px; overflow: hidden;
+    background: repeating-linear-gradient(90deg, #131a27 0 2px, transparent 2px 6px);
+    position: relative; border: 1px solid var(--line);
+  }
+  .pulse-strip .fill {
+    position: absolute; inset: 0; width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    transition: width 0.6s ease, background 0.6s ease;
+  }
+  .pulse-strip .fill.degraded { background: linear-gradient(90deg, var(--amber), var(--red)); }
+  .pulse-strip .label {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; color: #fff; mix-blend-mode: difference;
+  }
+  .status-pill {
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 3px;
+    border: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .status-pill.healthy { color: var(--green); border-color: #2e5233; }
+  .status-pill.degraded { color: var(--amber); border-color: #5a4520; }
+  .status-pill.unknown { color: var(--muted); }
+  .timestamp { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    padding: 20px 24px 40px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 18px;
+    display: flex; flex-direction: column;
+    min-height: 120px;
+  }
+  .card.span-2 { grid-column: span 2; }
+  .card.span-4 { grid-column: span 4; }
+  .card h2 {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .card h2 .count { color: var(--text); background: var(--panel-2); border-radius: 3px; padding: 1px 7px; font-size: 11px; }
+
+  .big-number { font-family: var(--mono); font-size: 32px; font-weight: 600; line-height: 1; }
+  .big-number.green { color: var(--green); }
+  .big-number.amber { color: var(--amber); }
+  .big-number.red { color: var(--red); }
+  .sub-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-family: var(--mono); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 7px; }
+  .dot.healthy, .dot.idle { background: var(--green); }
+  .dot.running { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+  .dot.degraded, .dot.paused { background: var(--amber); }
+  .dot.failed, .dot.down { background: var(--red); }
+
+  .badge { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge.info { color: var(--cyan); background: rgba(57,186,233,0.1); }
+  .badge.warning { color: var(--amber); background: rgba(255,180,84,0.1); }
+  .badge.error { color: var(--red); background: rgba(242,109,120,0.1); }
+  .badge.critical { color: #fff; background: var(--red); }
+
+  .event-list { max-height: 340px; overflow-y: auto; }
+  .event-row { display: grid; grid-template-columns: 90px 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12px; align-items: center; }
+  .event-row time { font-family: var(--mono); color: var(--muted); font-size: 10.5px; }
+  .event-row .etype { font-family: var(--mono); }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .toolbar input, .toolbar select {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-family: var(--mono); font-size: 11.5px; padding: 5px 8px; border-radius: 3px;
+  }
+  .toolbar input { flex: 1; min-width: 140px; }
+
+  .empty-note { color: var(--muted); font-size: 12px; font-style: italic; padding: 10px 0; }
+  .replay-link { font-family: var(--mono); font-size: 11px; color: var(--cyan); text-decoration: none; }
+  .replay-link:hover { text-decoration: underline; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+  @media (max-width: 1100px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .card.span-2, .card.span-4 { grid-column: span 2; }
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .card.span-2, .card.span-4 { grid-column: span 1; }
+    .topbar { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">AASC<small>LIVE OPERATIONS</small></div>
+  <div class="pulse-strip"><div class="fill" id="pulseFill"></div><div class="label" id="pulseLabel">connecting…</div></div>
+  <div class="status-pill unknown" id="healthPill">unknown</div>
+  <div class="timestamp" id="timestamp">—</div>
+</div>
+
+<div class="grid" id="grid">
+
+  <div class="card">
+    <h2>Platform Health</h2>
+    <div class="big-number" id="readinessNumber">—</div>
+    <div class="sub-label" id="readinessLabel">readiness score</div>
+  </div>
+
+  <div class="card">
+    <h2>Workflows <span class="count" id="wfCount">0</span></h2>
+    <div id="wfSummary" class="sub-label"></div>
+    <div id="wfRows"></div>
+  </div>
+
+  <div class="card">
+    <h2>Active Incidents <span class="count" id="incCount">0</span></h2>
+    <div id="incRows"><div class="empty-note">no active incidents</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Versioning</h2>
+    <div id="verRows"><div class="empty-note">no version data</div></div>
+  </div>
+
+  <div class="card span-2">
+    <h2>Service Status <span class="count" id="svcCount">0</span></h2>
+    <div id="svcRows"></div>
+  </div>
+
+  <div class="card span-2">
+    <h2>Metrics</h2>
+    <div id="metricsGrid" style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px;"></div>
+  </div>
+
+  <div class="card span-4">
+    <h2>Event Stream <span class="count" id="evtCount">0</span></h2>
+    <div class="toolbar">
+      <input id="evtSearch" type="text" placeholder="search project / entity / event type…" />
+      <select id="evtCategory"><option value="">all categories</option></select>
+      <select id="evtSeverity">
+        <option value="">all severities</option>
+        <option value="info">info</option>
+        <option value="warning">warning</option>
+        <option value="error">error</option>
+        <option value="critical">critical</option>
+      </select>
+    </div>
+    <div class="event-list" id="evtRows"></div>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = "/platform/dashboard";
+const POLL_MS = 5000;
+let lastDashboard = null;
+
+// ── Sample data used only if the real API isn't reachable from this
+// static preview (no backend attached) — this file is meant to be
+// served by the real FastAPI app per the M4.3 handover; the fallback
+// exists purely so the SPA itself can be reviewed standalone. ──
+function sampleDashboard() {
+  const now = new Date().toISOString();
+  return {
+    generated_at: now,
+    summary: {
+      generated_at: now, overall_ready: true, readiness_score: 0.94, health_status: "healthy",
+      service_count: 11, healthy_service_count: 10, workflow_count: 10, workflows_healthy_count: 9,
+      workflows_running_count: 2, workflows_failed_count: 1, active_incident_count: 1,
+      recent_event_count: 6, degraded_sections: [],
+    },
+    services: ["architecture","engineering","qa","security","devops","monitoring","incident_response",
+      "repository","platform_integration","manager","workflow_refinement"].map((n,i) => (
+      { name: n, status: i === 4 ? "degraded" : "healthy", detail: i === 4 ? "queue backlog" : null })),
+    workflows: [
+      { name: "engineering", state: "running", healthy: true, version: "1.3", graph_hash: "8f2a91", execution_count: 142, errors: [] },
+      { name: "qa", state: "idle", healthy: true, version: "1.1", graph_hash: "3bd110", execution_count: 88, errors: [] },
+      { name: "security", state: "failed", healthy: false, version: "1.0", graph_hash: "9e0cc4", execution_count: 12, errors: ["missing edge: review->approve"] },
+      { name: "devops", state: "paused", healthy: true, version: "2.0", graph_hash: "aa441f", execution_count: 54, errors: [] },
+    ],
+    events: [
+      { id: 1, event_type: "approval.granted.requirements", category: "approval", severity: "info", actor_type: "user", actor_id: "u1", project_id: "proj-142", recorded_at: now },
+      { id: 2, event_type: "workflow.failed.security", category: "workflow", severity: "error", actor_type: "system", actor_id: "sys", project_id: "proj-142", recorded_at: now },
+      { id: 3, event_type: "incident.opened.monitoring", category: "incident", severity: "critical", actor_type: "system", actor_id: "sys", project_id: null, recorded_at: now },
+    ],
+    incidents: [
+      { id: "1", title: "NATS consumer lag on monitoring.alerts", severity: "critical", status: "open", workflow: "monitoring", opened_at: now, source: "audit_trail" },
+    ],
+    versions: [
+      { workflow: "engineering", current_version: "1.3", previous_version: "1.2", is_breaking_from_previous: false, compatible_with_previous: true },
+      { workflow: "security", current_version: "1.0", previous_version: null, is_breaking_from_previous: null, compatible_with_previous: null },
+    ],
+    metrics: { available: true, workflow_latency_ms: 812.4, executions_total: 296, alerts_total: 3, deployments_total: 14, websocket_connections: 27, extra: {} },
+    degraded_sections: [],
+  };
+}
+
+async function fetchDashboard(params) {
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v)));
+  try {
+    const res = await fetch(`${API_BASE}?${qs.toString()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    return sampleDashboard();
+  }
+}
+
+function fmtPct(x) { return x == null ? "—" : `${Math.round(x * 100)}%`; }
+
+function render(dash) {
+  lastDashboard = dash;
+  const s = dash.summary;
+
+  document.getElementById("timestamp").textContent = new Date(dash.generated_at).toLocaleTimeString();
+
+  const pillEl = document.getElementById("healthPill");
+  pillEl.textContent = s.health_status;
+  pillEl.className = "status-pill " + (s.health_status === "healthy" ? "healthy" : (s.health_status === "unknown" ? "unknown" : "degraded"));
+
+  const ready = s.readiness_score;
+  const pct = ready == null ? 0 : Math.round(ready * 100);
+  const fill = document.getElementById("pulseFill");
+  fill.style.width = pct + "%";
+  fill.className = "fill" + (s.health_status !== "healthy" ? " degraded" : "");
+  document.getElementById("pulseLabel").textContent =
+    (dash.degraded_sections.length ? `DEGRADED: ${dash.degraded_sections.join(", ")}` : `${pct}% READY`);
+
+  document.getElementById("readinessNumber").textContent = fmtPct(ready);
+  document.getElementById("readinessNumber").className = "big-number " +
+    (ready == null ? "" : ready > 0.8 ? "green" : ready > 0.5 ? "amber" : "red");
+  document.getElementById("readinessLabel").textContent =
+    `${s.healthy_service_count}/${s.service_count} services healthy`;
+
+  // Workflows
+  document.getElementById("wfCount").textContent = s.workflow_count;
+  document.getElementById("wfSummary").textContent =
+    `${s.workflows_running_count} running · ${s.workflows_failed_count} failed`;
+  document.getElementById("wfRows").innerHTML = dash.workflows.map(w => `
+    <div class="row">
+      <span class="name"><span class="dot ${w.state}"></span>${w.name}</span>
+      <span>${w.version ? "v" + w.version : "—"} · ${w.state}</span>
+    </div>`).join("") || `<div class="empty-note">no workflows reported</div>`;
+
+  // Services
+  document.getElementById("svcCount").textContent = dash.services.length;
+  document.getElementById("svcRows").innerHTML = dash.services.map(sv => `
+    <div class="row">
+      <span class="name"><span class="dot ${sv.status}"></span>${sv.name}</span>
+      <span>${sv.detail ?? sv.status}</span>
+    </div>`).join("") || `<div class="empty-note">no services reported</div>`;
+
+  // Incidents
+  document.getElementById("incCount").textContent = dash.incidents.length;
+  document.getElementById("incRows").innerHTML = dash.incidents.length ? dash.incidents.map(i => `
+    <div class="row">
+      <span class="name">${i.title}</span>
+      <span class="badge ${i.severity}">${i.severity}</span>
+    </div>`).join("") : `<div class="empty-note">no active incidents</div>`;
+
+  // Versions
+  document.getElementById("verRows").innerHTML = dash.versions.length ? dash.versions.map(v => `
+    <div class="row">
+      <span class="name">${v.workflow}</span>
+      <span>${v.current_version ?? "—"}${v.previous_version ? " ← " + v.previous_version : ""}
+        ${v.is_breaking_from_previous ? '<span class="badge error">breaking</span>' : ""}</span>
+    </div>`).join("") : `<div class="empty-note">no version data</div>`;
+
+  // Metrics
+  const m = dash.metrics;
+  const metricEntries = m.available ? [
+    ["Latency", m.workflow_latency_ms != null ? `${m.workflow_latency_ms} ms` : "—"],
+    ["Executions", m.executions_total ?? "—"],
+    ["Alerts", m.alerts_total ?? "—"],
+    ["Deployments", m.deployments_total ?? "—"],
+    ["WS connections", m.websocket_connections ?? "—"],
+  ] : [];
+  document.getElementById("metricsGrid").innerHTML = m.available
+    ? metricEntries.map(([label, val]) => `
+        <div><div style="font-family:var(--mono); font-size:20px;">${val}</div>
+        <div class="sub-label">${label}</div></div>`).join("")
+    : `<div class="empty-note">${m.note || "metrics unavailable"}</div>`;
+
+  // Event stream + category filter options
+  const catSelect = document.getElementById("evtCategory");
+  const cats = Array.from(new Set(dash.events.map(e => e.category))).sort();
+  const currentCat = catSelect.value;
+  catSelect.innerHTML = `<option value="">all categories</option>` +
+    cats.map(c => `<option value="${c}" ${c === currentCat ? "selected" : ""}>${c}</option>`).join("");
+
+  document.getElementById("evtCount").textContent = dash.events.length;
+  document.getElementById("evtRows").innerHTML = dash.events.length ? dash.events.map(e => `
+    <div class="event-row">
+      <time>${e.recorded_at ? new Date(e.recorded_at).toLocaleTimeString() : "—"}</time>
+      <span class="etype">${e.event_type}${e.project_id ? " · " + e.project_id : ""}</span>
+      <span class="badge ${e.severity}">${e.severity}</span>
+    </div>`).join("") : `<div class="empty-note">no recent events</div>`;
+}
+
+async function poll() {
+  const params = {
+    category: document.getElementById("evtCategory").value,
+    severity: document.getElementById("evtSeverity").value,
+    search: document.getElementById("evtSearch").value,
+  };
+  const dash = await fetchDashboard(params);
+  render(dash);
+}
+
+document.getElementById("evtSearch").addEventListener("input", debounce(poll, 300));
+document.getElementById("evtCategory").addEventListener("change", poll);
+document.getElementById("evtSeverity").addEventListener("change", poll);
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
