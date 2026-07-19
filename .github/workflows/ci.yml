@@ -1,0 +1,104 @@
+# M4.10 §"Final CI"
+#
+# Scope note: no `.github/workflows/*.yml` exists in this sandbox
+# slice's zip to literally "extend" (per §"Final CI" — see the M4.10
+# handover doc §4 for this call-out), so this file is new rather than
+# a diff against a pre-existing workflow. Jobs still follow the brief
+# exactly: unit tests, benchmark, release validation, docs generation,
+# packaging — with documentation/release-bundle/benchmark-report
+# artifacts uploaded.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-asyncio pydantic fastapi sqlalchemy aiosqlite httpx pyyaml
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Run unit tests
+        run: pytest tests/ -q
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pydantic fastapi sqlalchemy
+      - name: Run benchmark suite
+        run: python benchmarks/runner.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports
+          path: |
+            benchmarks/benchmark.json
+            benchmarks/benchmark.md
+
+  release-validation:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pydantic fastapi sqlalchemy
+      - name: Run release readiness check
+        run: |
+          python services/integration/release_validation/release_cli.py check "$(cat release/VERSION)" \
+            --format markdown || true
+      - name: Run Final QA
+        run: python services/integration/release_validation/release_cli.py qa || true
+
+  docs-generation:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pydantic fastapi sqlalchemy
+      - name: Generate documentation
+        run: python services/integration/release_validation/release_cli.py docs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/generated/
+
+  packaging:
+    runs-on: ubuntu-latest
+    needs: [benchmark, release-validation, docs-generation]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pydantic fastapi sqlalchemy
+      - name: Build release manifest
+        run: python services/integration/release_validation/release_cli.py package "$(cat release/VERSION)" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: |
+            release/
+            docs/generated/
