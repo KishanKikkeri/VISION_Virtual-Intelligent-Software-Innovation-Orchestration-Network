@@ -1,0 +1,23 @@
+{
+  "metrics": [
+    {
+      "name": "workflow_speed",
+      "unit": "ms",
+      "value": 0.0014,
+      "baseline": null
+    },
+    {
+      "name": "dashboard_refresh",
+      "unit": "ms",
+      "value": 0.0014,
+      "baseline": null
+    },
+    {
+      "name": "api_throughput",
+      "unit": "ops_sec",
+      "value": 1965038.04,
+      "baseline": null
+    }
+  ],
+  "generated_at": "2026-07-19T09:55:49.450854+00:00"
+}
