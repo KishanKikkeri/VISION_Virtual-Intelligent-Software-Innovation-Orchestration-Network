@@ -1,17 +1,57 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
-.env
-.env.local
+*.py[cod]
+*$py.class
+*.so
+.Python
 .venv/
 venv/
+env/
+ENV/
+build/
 dist/
 *.egg-info/
+.eggs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+/secrets/
+
+# Test, coverage, and type-checking output
 .pytest_cache/
 .mypy_cache/
+.pyright/
 .ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+pytestdebug.log
+
+# Runtime data and logs
 data/
+logs/
+*.log
 *.db
 *.sqlite
-htmlcov/
-.coverage
+*.sqlite3
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local tooling
+.ipynb_checkpoints/
+.cache/

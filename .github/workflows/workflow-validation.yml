@@ -1,0 +1,98 @@
+name: Workflow Validation & Quality Gates
+
+# CI/CD & Quality Gates:
+#   - "Add workflow validation to CI"           -> validate-and-lint job
+#   - "Enforce graph linting ... on PRs"         -> validate-and-lint job (runs on pull_request)
+#   - "Auto-generate Mermaid docs during builds" -> docs job
+
+on:
+  pull_request:
+    paths:
+      - "services/**/workflows/**.py"
+      - "services/**/routing/**"
+      - "services/**/routing.py"
+      - "services/integration/validators/**"
+      - "services/integration/diagnostics/**"
+      - "scripts/ci/**"
+      - "tests/foundation/test_m310_workflows.py"
+  push:
+    branches: [main]
+
+jobs:
+  validate-and-lint:
+    name: Workflow health + graph lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]" 2>/dev/null || pip install fastapi pydantic pydantic-settings \
+            structlog langgraph typing_extensions httpx pytest pytest-asyncio sqlalchemy \
+            "python-jose[cryptography]" passlib
+
+      - name: Run M3.10 workflow test suite (393 tests)
+        run: python -m pytest tests/foundation/test_m310_workflows.py -v
+
+      - name: Workflow health + architecture lint gate
+        run: python scripts/ci/validate_workflows.py
+        # Non-zero exit here fails the check — an unhealthy workflow
+        # graph (build failure, real unreachable node, END unreachable)
+        # or a NEW (non-baselined) lint finding blocks the merge. See
+        # services/integration/diagnostics/lint_baseline.json for
+        # currently-accepted, tracked findings.
+
+      - name: Upload validation report
+        if: always()
+        run: python scripts/ci/validate_workflows.py > workflow-validation-report.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workflow-validation-report
+          path: workflow-validation-report.txt
+
+  docs:
+    name: Mermaid docs freshness
+    runs-on: ubuntu-latest
+    needs: validate-and-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install fastapi pydantic pydantic-settings structlog langgraph typing_extensions \
+            httpx pytest sqlalchemy "python-jose[cryptography]" passlib
+
+      - name: Check docs/workflows/ is up to date
+        if: github.event_name == 'pull_request'
+        run: python scripts/ci/generate_docs.py --check
+        # Fails the PR if a workflow graph changed but docs/workflows/
+        # wasn't regenerated and committed alongside it.
+
+      - name: Regenerate docs/workflows/
+        if: github.event_name == 'push'
+        run: python scripts/ci/generate_docs.py
+
+      - name: Upload generated docs as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-docs
+          path: docs/workflows/
+
+      - name: Auto-commit regenerated docs (main only)
+        if: github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs(workflows): auto-regenerate Mermaid diagrams [skip ci]"
+          file_pattern: "docs/workflows/*.md"
