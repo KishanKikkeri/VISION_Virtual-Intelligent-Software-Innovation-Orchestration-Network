@@ -24,8 +24,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from services.integration.dashboard.dashboard_models import (
-    DashboardSummary, EventStreamItem, IncidentSummary, MetricsSnapshot,
-    PlatformDashboard, ServiceStatus, VersionSummary, WorkflowStatusEntry,
+    ChaosSummary, DashboardSummary, DesignerSummary, EventStreamItem, IncidentSummary, MetricsSnapshot,
+    PlatformDashboard, PluginsSummary, ProductionSummary, ReleaseSummary, SecuritySummary, ServiceStatus,
+    VersionSummary, WorkflowStatusEntry,
 )
 
 _ERROR_HINTS = ("fail", "error", "reject", "crash", "denied")
@@ -283,6 +284,110 @@ def build_dashboard_summary(
     )
 
 
+def build_chaos_summary(raw: Optional[Dict[str, Any]]) -> Optional[ChaosSummary]:
+    """M4.5 §12 — turns `chaos_dashboard.fetch_chaos_dashboard_section`'s
+    raw dict into the pydantic card. `raw=None` (chaos tables/DB not
+    wired, or the fetch itself failed) yields `None`, same "missing
+    card, not a broken dashboard" convention every other `build_*`
+    function in this file follows for an unavailable data source."""
+    if raw is None:
+        return None
+    return ChaosSummary(
+        running_scenarios=raw.get("running_scenarios", []),
+        active_faults=raw.get("active_faults", []),
+        latest_resilience_score=raw.get("latest_resilience_score"),
+        historical_trend=raw.get("historical_trend", []),
+    )
+
+
+def build_security_summary(raw: Optional[Dict[str, Any]]) -> Optional[SecuritySummary]:
+    """M4.6 Dashboard Integration — turns `security_repository.
+    fetch_security_dashboard_section`'s raw dict into the pydantic
+    card. `raw=None` (security tables/DB not wired, or the fetch
+    itself failed) yields `None`, same \"missing card, not a broken
+    dashboard\" convention `build_chaos_summary` follows for M4.5."""
+    if raw is None:
+        return None
+    return SecuritySummary(
+        latest_posture_score=raw.get("latest_posture_score"),
+        latest_status=raw.get("latest_status"),
+        active_finding_counts=raw.get("active_finding_counts", {}),
+        historical_trend=raw.get("historical_trend", []),
+    )
+
+
+def build_plugins_summary(raw: Optional[Dict[str, Any]]) -> Optional[PluginsSummary]:
+    """M4.7 Dashboard Integration — turns `plugin_repository.
+    fetch_plugin_dashboard_section`'s raw dict into the pydantic card.
+    `raw=None` (plugin tables/DB not wired, or the fetch itself
+    failed) yields `None`, same \"missing card, not a broken dashboard\"
+    convention `build_chaos_summary`/`build_security_summary` follow."""
+    if raw is None:
+        return None
+    return PluginsSummary(
+        installed_count=raw.get("installed_count", 0), enabled_count=raw.get("enabled_count", 0),
+        disabled_count=raw.get("disabled_count", 0), error_count=raw.get("error_count", 0),
+        unhealthy_plugins=raw.get("unhealthy_plugins", []),
+    )
+
+
+def build_designer_summary(raw: Optional[Dict[str, Any]]) -> Optional[DesignerSummary]:
+    """M4.8 Dashboard Integration — turns `designer_repository.
+    fetch_designer_dashboard_section`'s raw dict into the pydantic card.
+    `raw=None` (designer tables/DB not wired, or the fetch itself
+    failed) yields `None`, same "missing card, not a broken dashboard"
+    convention `build_chaos_summary`/`build_security_summary`/
+    `build_plugins_summary` follow."""
+    if raw is None:
+        return None
+    return DesignerSummary(
+        workflow_count=raw.get("workflow_count", 0), recent_edits=raw.get("recent_edits", []),
+        invalid_count=raw.get("invalid_count", 0),
+    )
+
+
+def build_production_summary(raw: Optional[Dict[str, Any]]) -> Optional[ProductionSummary]:
+    """M4.9 Dashboard Integration — turns `production_repository.
+    fetch_production_dashboard_section`'s raw dict into the pydantic
+    card. `raw=None` (production tables/DB not wired, or the fetch
+    itself failed) yields `None`, same "missing card, not a broken
+    dashboard" convention `build_chaos_summary`/`build_security_summary`/
+    `build_plugins_summary`/`build_designer_summary` follow."""
+    if raw is None:
+        return None
+    return ProductionSummary(
+        latest_release_version=raw.get("latest_release_version"),
+        latest_backup_at=raw.get("latest_backup_at"),
+        backup_count=raw.get("backup_count", 0),
+        latest_environment_status=raw.get("latest_environment_status"),
+    )
+
+
+def build_release_summary(raw: Optional[Dict[str, Any]]) -> Optional["ReleaseSummary"]:
+    """M4.10 Dashboard Integration — turns a plain dict (as produced by
+    `release_validation.readiness_report`/`chaos`/`security`/`plugins`/
+    `designer`/`production` summaries already assembled elsewhere) into
+    the Release card. `raw=None` yields `None`, same "missing card, not
+    a broken dashboard" convention every prior M4.x summary builder in
+    this module follows. Callers typically build `raw` by re-projecting
+    fields already computed for the other cards in the same dashboard
+    assembly call (see `dashboard_service.py`'s integration point) —
+    this function does not itself recompute a readiness score."""
+    if raw is None:
+        return None
+    return ReleaseSummary(
+        readiness_score=raw.get("readiness_score"),
+        workflow_count=raw.get("workflow_count", 0),
+        plugin_count=raw.get("plugin_count", 0),
+        security_posture=raw.get("security_posture"),
+        chaos_score=raw.get("chaos_score"),
+        production_score=raw.get("production_score"),
+        version=raw.get("version"),
+        git_commit=raw.get("git_commit"),
+        build_date=raw.get("build_date"),
+    )
+
+
 def assemble_platform_dashboard(
     services: List[ServiceStatus],
     workflows: List[WorkflowStatusEntry],
@@ -294,6 +399,12 @@ def assemble_platform_dashboard(
     readiness_score: Optional[float] = None,
     health_status: str = "unknown",
     degraded_sections: Optional[List[str]] = None,
+    chaos: Optional[ChaosSummary] = None,
+    security: Optional[SecuritySummary] = None,
+    plugins: Optional[PluginsSummary] = None,
+    designer: Optional[DesignerSummary] = None,
+    production: Optional[ProductionSummary] = None,
+    release: Optional[ReleaseSummary] = None,
 ) -> PlatformDashboard:
     degraded_sections = degraded_sections or []
     summary = build_dashboard_summary(
@@ -310,5 +421,11 @@ def assemble_platform_dashboard(
         incidents=incidents,
         versions=versions,
         metrics=metrics,
+        chaos=chaos,
+        security=security,
+        plugins=plugins,
+        designer=designer,
+        production=production,
+        release=release,
         degraded_sections=degraded_sections,
     )

@@ -123,6 +123,108 @@ class DashboardSummary(BaseModel):
     degraded_sections: List[str] = Field(default_factory=list)
 
 
+class ChaosSummary(BaseModel):
+    """M4.5 §12 Dashboard Integration — the chaos-testing card's data,
+    sourced from `services.integration.chaos.chaos_dashboard.
+    fetch_chaos_dashboard_section` (in-flight scenario state) and
+    `chaos_repository.py` (latest resilience score / historical
+    trend). Optional and additive: a platform with no chaos runs yet
+    (or chaos DB tables not wired) simply omits this card — see
+    `PlatformDashboard.chaos`."""
+    running_scenarios: List[Dict[str, Any]] = Field(default_factory=list)
+    active_faults: List[str] = Field(default_factory=list)
+    latest_resilience_score: Optional[float] = None
+    historical_trend: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SecuritySummary(BaseModel):
+    """M4.6 Dashboard Integration — the security-hardening card's data,
+    sourced from `services.integration.security_hardening.
+    security_repository.fetch_security_dashboard_section` (latest
+    posture score/status, active finding counts by severity, and
+    historical trend). Optional and additive: a platform with no
+    security scans yet (or security tables not wired) simply omits
+    this card — see `PlatformDashboard.security`, same convention
+    `ChaosSummary`/`PlatformDashboard.chaos` established for M4.5."""
+    latest_posture_score: Optional[float] = None
+    latest_status: Optional[str] = None
+    active_finding_counts: Dict[str, int] = Field(default_factory=dict)
+    historical_trend: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PluginsSummary(BaseModel):
+    """M4.7 Dashboard Integration — the Plugin SDK card's data, sourced
+    from `services.integration.plugin_sdk.plugin_repository.
+    fetch_plugin_dashboard_section` (installed/enabled/disabled/error
+    counts and a list of plugin ids currently reporting unhealthy —
+    see `plugin_runtime.compute_health`). Optional and additive: a
+    platform with no plugins installed (or plugin tables not wired)
+    simply omits this card — see `PlatformDashboard.plugins`, same
+    convention `ChaosSummary`/`SecuritySummary` established for
+    M4.5/M4.6."""
+    installed_count: int = 0
+    enabled_count: int = 0
+    disabled_count: int = 0
+    error_count: int = 0
+    unhealthy_plugins: List[str] = Field(default_factory=list)
+
+
+class DesignerSummary(BaseModel):
+    """M4.8 Dashboard Integration — the Visual Workflow Designer card's
+    data, sourced from `services.integration.workflow_designer.
+    designer_repository.fetch_designer_dashboard_section` (workflow
+    count, recently edited workflows, and a count of workflows currently
+    failing `validation_bridge.validate_layout`). Optional and additive:
+    a platform with no designer workflows saved yet (or designer tables
+    not wired) simply omits this card — see `PlatformDashboard.designer`,
+    same convention `ChaosSummary`/`SecuritySummary`/`PluginsSummary`
+    established for M4.5/M4.6/M4.7."""
+    workflow_count: int = 0
+    recent_edits: List[Dict[str, Any]] = Field(default_factory=list)
+    invalid_count: int = 0
+
+
+class ProductionSummary(BaseModel):
+    """M4.9 Dashboard Integration — the Production Readiness card's
+    data, sourced from `services.integration.production.
+    production_repository.fetch_production_dashboard_section` (latest
+    release version, latest backup timestamp/count, latest environment
+    check status). Optional and additive: a platform with no releases/
+    backups/checks recorded yet (or production tables not wired)
+    simply omits this card — see `PlatformDashboard.production`, same
+    convention `ChaosSummary`/`SecuritySummary`/`PluginsSummary`/
+    `DesignerSummary` established for M4.5-M4.8."""
+    latest_release_version: Optional[str] = None
+    latest_backup_at: Optional[str] = None
+    backup_count: int = 0
+    latest_environment_status: Optional[str] = None
+
+
+class ReleaseSummary(BaseModel):
+    """M4.10 Dashboard Integration — the Final Release card's data
+    (§3 "Release section"): readiness score, workflow count, plugin
+    count, security posture, chaos score, production score, version,
+    git commit, build date. Sourced by re-projecting `ChaosSummary.
+    latest_resilience_score` / `SecuritySummary.latest_posture_score` /
+    `PluginsSummary.installed_count` / `DesignerSummary.workflow_count`
+    / `ProductionSummary` — no new score is invented here, this card
+    only adds `readiness_score` (this milestone's own
+    `ReleaseScore.percentage`) plus release-identity fields (version/
+    git_commit/build_date) that no earlier card carries. Optional and
+    additive, same convention as `ChaosSummary`/.../`ProductionSummary`
+    established for M4.5-M4.9 — a platform with no readiness check run
+    yet simply omits this card."""
+    readiness_score: Optional[float] = None
+    workflow_count: int = 0
+    plugin_count: int = 0
+    security_posture: Optional[float] = None
+    chaos_score: Optional[float] = None
+    production_score: Optional[str] = None
+    version: Optional[str] = None
+    git_commit: Optional[str] = None
+    build_date: Optional[str] = None
+
+
 class PlatformDashboard(BaseModel):
     """The full `GET /platform/dashboard` payload — every card's data
     in one response, so a first paint doesn't need seven round trips.
@@ -138,4 +240,10 @@ class PlatformDashboard(BaseModel):
     incidents: List[IncidentSummary] = Field(default_factory=list)
     versions: List[VersionSummary] = Field(default_factory=list)
     metrics: MetricsSnapshot = Field(default_factory=MetricsSnapshot)
+    chaos: Optional[ChaosSummary] = None
+    security: Optional[SecuritySummary] = None
+    plugins: Optional[PluginsSummary] = None
+    designer: Optional[DesignerSummary] = None
+    production: Optional[ProductionSummary] = None
+    release: Optional[ReleaseSummary] = None
     degraded_sections: List[str] = Field(default_factory=list)

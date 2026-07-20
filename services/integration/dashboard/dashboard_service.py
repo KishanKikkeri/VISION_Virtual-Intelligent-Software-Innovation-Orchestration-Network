@@ -163,6 +163,22 @@ async def _fetch_incidents(db: Any, limit: int = 100) -> Optional[List[Dict[str,
         return None
 
 
+async def _fetch_chaos(db: Any) -> Optional[Dict[str, Any]]:
+    """M4.5 §12 Dashboard Integration. `db=None` degrades to
+    in-memory-only (currently-running scenarios still shown; no
+    resilience-score history) rather than `None` outright — chaos runs
+    are meaningful to show even without a DB configured, unlike
+    sections that are pure DB reads. See `chaos_dashboard.
+    fetch_chaos_dashboard_section`'s own docstring for the `None`
+    contract this wraps."""
+    try:
+        from services.integration.chaos import chaos_dashboard
+        return await chaos_dashboard.fetch_chaos_dashboard_section(db)
+    except Exception as e:  # noqa: BLE001
+        log.info("dashboard_chaos_unavailable", error=str(e))
+        return None
+
+
 # ── Orchestration ──────────────────────────────────────────────────
 
 async def _gather_raw(
@@ -186,10 +202,12 @@ async def _gather_raw(
     metrics = await cache.get_or_build("metrics", _fetch_metrics, DEFAULT_TTL_SECONDS)
     events = await _fetch_events(db, limit=event_limit, category=event_category)  # always fresh: it's the live feed
     incidents = await cache.get_or_build("incidents", lambda: _fetch_incidents(db), DEFAULT_TTL_SECONDS)
+    chaos = await cache.get_or_build("chaos", lambda: _fetch_chaos(db), DEFAULT_TTL_SECONDS)
 
     return {
         "health": health, "readiness": readiness, "workflow_reports": workflow_reports,
         "version_histories": version_histories, "metrics": metrics, "events": events, "incidents": incidents,
+        "chaos": chaos,
     }
 
 
@@ -223,6 +241,8 @@ def _degraded_sections(raw: Dict[str, Any]) -> List[str]:
         sections.append("events")
     if raw.get("incidents") is None:
         sections.append("incidents")
+    if raw.get("chaos") is None:
+        sections.append("chaos")
     return sections
 
 
@@ -248,6 +268,7 @@ def _build_from_raw(
         raw.get("events") or [], category=event_category, severity=event_severity, search=event_search)
     incidents: List[IncidentSummary] = builder.build_incident_list(raw.get("incidents") or [])
     metrics: MetricsSnapshot = builder.build_metrics_snapshot(raw.get("metrics"))
+    chaos = builder.build_chaos_summary(raw.get("chaos"))
 
     readiness = raw.get("readiness") or {}
     health = raw.get("health") or {}
@@ -260,6 +281,7 @@ def _build_from_raw(
         readiness_score=readiness.get("score"),
         health_status=str(overall_status or "unknown"),
         degraded_sections=_degraded_sections(raw),
+        chaos=chaos,
     )
 
 
