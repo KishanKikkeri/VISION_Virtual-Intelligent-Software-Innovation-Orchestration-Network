@@ -3,21 +3,21 @@
     {
       "name": "workflow_speed",
       "unit": "ms",
-      "value": 0.0014,
+      "value": 0.0016,
       "baseline": null
     },
     {
       "name": "dashboard_refresh",
       "unit": "ms",
-      "value": 0.0014,
+      "value": 0.002,
       "baseline": null
     },
     {
       "name": "api_throughput",
       "unit": "ops_sec",
-      "value": 1965038.04,
+      "value": 1284439.02,
       "baseline": null
     }
   ],
-  "generated_at": "2026-07-19T09:55:49.450854+00:00"
+  "generated_at": "2026-07-19T15:08:59.373203+00:00"
 }
