@@ -1,0 +1,54 @@
+# deploy/docker/docker-compose.prod.yml
+# =======================================
+# M4.9 §12 Deployment Assets — production Compose file. Template only —
+# every value below is a required, un-defaulted `${VAR:?...}` reference;
+# this file will refuse to start (`docker compose config` errors out)
+# until the deployer supplies real values via a real `.env`/secrets
+# manager, which is deliberate for production (§12 "templates, not
+# environment-specific values"). Kubernetes/Helm (see `deploy/k8s/`,
+# `deploy/helm/`) is the recommended production deployment path; this
+# Compose file is provided for smaller, single-host production
+# deployments per the brief's explicit ask for a prod Compose file.
+
+version: "3.9"
+
+services:
+  api:
+    image: ${AASC_IMAGE:?AASC_IMAGE is required}:${AASC_VERSION:?AASC_VERSION is required}
+    environment:
+      AASC_ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      NATS_URL: ${NATS_URL:?NATS_URL is required}
+      LOG_LEVEL: WARNING
+      SECRETS_BACKEND: vault
+      TLS_CERT_PATH: /etc/aasc/tls/tls.crt
+      TLS_KEY_PATH: /etc/aasc/tls/tls.key
+    ports:
+      - "8443:8443"
+    volumes:
+      - aasc_tls_prod:/etc/aasc/tls:ro
+    deploy:
+      replicas: ${AASC_REPLICAS:-4}
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+        reservations:
+          cpus: "1.0"
+          memory: 1g
+      restart_policy:
+        condition: on-failure
+        max_attempts: 10
+      update_config:
+        order: start-first
+        failure_action: rollback
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8443/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  aasc_tls_prod:
+    external: true

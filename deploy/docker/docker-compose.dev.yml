@@ -1,0 +1,58 @@
+# deploy/docker/docker-compose.dev.yml
+# =====================================
+# M4.9 §12 Deployment Assets — development Compose file.
+#
+# This is a TEMPLATE, not an environment-specific values file (§12
+# "These should be templates, not environment-specific values"):
+# every secret/credential is an `${ENV_VAR:-default}` placeholder, none
+# are real values. Pairs with `deploy.profile=development` in
+# `deployment_profiles.py` (loose security defaults, verbose logging,
+# hot-reload friendly) — never used as-is for staging/production.
+
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: aasc-platform:${AASC_VERSION:-dev}
+    environment:
+      AASC_ENVIRONMENT: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://aasc:aasc@postgres:5432/aasc}
+      REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
+      NATS_URL: ${NATS_URL:-nats://messaging:4222}
+      LOG_LEVEL: DEBUG
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ../..:/app:cached
+    depends_on:
+      - postgres
+      - cache
+      - messaging
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aasc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aasc}
+      POSTGRES_DB: ${POSTGRES_DB:-aasc}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - aasc_postgres_dev:/var/lib/postgresql/data
+
+  cache:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  messaging:
+    image: nats:2-alpine
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+
+volumes:
+  aasc_postgres_dev:
