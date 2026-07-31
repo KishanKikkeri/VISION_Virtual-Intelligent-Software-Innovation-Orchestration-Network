@@ -1,0 +1,17 @@
+# deploy/k8s/configmap.yaml
+# ==========================
+# Non-secret config only, mirroring `deployment_profiles.py`'s
+# non-secret sections (logging/monitoring/workflow). Secrets live in
+# secret.yaml.example instead — never here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aasc-platform-config
+data:
+  AASC_ENVIRONMENT: "production"
+  LOG_LEVEL: "WARNING"
+  LOG_FORMAT: "json"
+  MONITORING_ENABLED: "true"
+  MONITORING_SAMPLE_RATE: "0.1"
+  WORKFLOW_MAX_CONCURRENT_EXECUTIONS: "100"
+  DASHBOARD_REFRESH_INTERVAL_S: "30"

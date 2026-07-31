@@ -1,0 +1,16 @@
+# deploy/k8s/pvc.yaml
+# =====================
+# Backing storage for backup_manager.py's `destination_dir` when
+# running in-cluster (a `BackupRecord.location` under this mount) and
+# for any locally-persisted plugin/workflow artifacts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aasc-platform-backups
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard

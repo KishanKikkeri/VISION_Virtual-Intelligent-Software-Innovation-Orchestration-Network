@@ -1,0 +1,65 @@
+# deploy/k8s/deployment.yaml
+# ===========================
+# M4.9 §12 — plain Kubernetes Deployment (no Helm templating) for
+# clusters that don't use the Helm chart in deploy/helm/. Template
+# only: image tag, replica count, and resource values are placeholders
+# a deployer overrides via `kubectl apply -f - <<< "$(envsubst < ...)"`
+# or a kustomize overlay — this file intentionally has no environment
+# baked in.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aasc-platform
+  labels:
+    app: aasc-platform
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aasc-platform
+  template:
+    metadata:
+      labels:
+        app: aasc-platform
+    spec:
+      serviceAccountName: aasc-platform
+      containers:
+        - name: aasc-platform
+          image: aasc-platform:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: aasc-platform-config
+            - secretRef:
+                name: aasc-platform-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/aasc/tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: aasc-platform-tls
+            optional: true

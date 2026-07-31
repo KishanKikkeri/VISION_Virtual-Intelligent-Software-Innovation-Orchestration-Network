@@ -1,0 +1,20 @@
+# deploy/k8s/servicemonitor.yaml
+# ================================
+# Requires the Prometheus Operator CRDs. Scrapes the same /metrics
+# endpoint the existing M3 Monitoring service already exposes — this
+# milestone only wires the ServiceMonitor CR, it does not add a new
+# metrics endpoint.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aasc-platform
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: aasc-platform
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
