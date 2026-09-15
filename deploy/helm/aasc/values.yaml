@@ -1,0 +1,53 @@
+# deploy/helm/aasc/values.yaml
+# ==============================
+# Defaults only — override per environment with
+# `helm upgrade --install aasc deploy/helm/aasc -f values-staging.yaml`
+# (an environment-specific values file a deployer maintains outside
+# this chart, mirroring `deployment_profiles.py`'s own layering).
+
+replicaCount: 3
+
+image:
+  repository: aasc-platform
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: false
+  className: nginx
+  host: aasc.example.com
+  tls: true
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: standard
+
+serviceMonitor:
+  enabled: false
+
+config:
+  environment: production
+  logLevel: WARNING
+  monitoringSampleRate: 0.1
+
+secrets: {}  # populate via --set-file / external secrets manager, never committed
