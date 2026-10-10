@@ -75,8 +75,8 @@ def main() -> int:
                 drift_found = True
                 print(f"FAIL: {name} is stale relative to the current graph definitions.")
                 diff = difflib.unified_diff(
-                    committed_path.read_text().splitlines(keepends=True),
-                    fresh_path.read_text().splitlines(keepends=True),
+                    committed_path.read_text(encoding="utf-8").splitlines(keepends=True),
+                    fresh_path.read_text(encoding="utf-8").splitlines(keepends=True),
                     fromfile=f"committed/{name}", tofile=f"freshly-generated/{name}",
                 )
                 sys.stdout.writelines(list(diff)[:40])
