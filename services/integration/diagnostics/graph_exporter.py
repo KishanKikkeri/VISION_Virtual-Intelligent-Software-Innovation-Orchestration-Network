@@ -142,7 +142,7 @@ def write_mermaid_docs(output_dir: str = "docs/workflows") -> List[str]:
         path.write_text(
             f"# Workflow: {name}\n\n"
             f"Healthy: {'✓' if report.healthy else '✗'}\n\n"
-            f"```mermaid\n{diagrams[name]}\n```\n"
+            f"```mermaid\n{diagrams[name]}\n```\n", encoding="utf-8"
         )
         written.append(str(path))
         index_rows.append(
