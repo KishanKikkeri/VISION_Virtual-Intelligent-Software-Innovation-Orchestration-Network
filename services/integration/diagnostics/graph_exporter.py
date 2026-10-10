@@ -151,6 +151,6 @@ def write_mermaid_docs(output_dir: str = "docs/workflows") -> List[str]:
         )
 
     index_path = out / "workflow_index.md"
-    index_path.write_text("# Workflow Index\n\n" + "\n".join(index_rows) + "\n")
+    index_path.write_text("# Workflow Index\n\n" + "\n".join(index_rows) + "\n", encoding="utf-8")
     written.append(str(index_path))
     return written
