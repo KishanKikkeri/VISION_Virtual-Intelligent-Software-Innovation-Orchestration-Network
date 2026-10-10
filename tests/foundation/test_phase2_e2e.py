@@ -259,7 +259,7 @@ MOCK_CRITIQUE_JSON = json.dumps({
 # ═══════════════════════════════════════════════════════════════
 
 class TestAgentRegistry:
-    def test_all_96_agents_registered(self):
+    def test_all_106_agents_registered(self):
         # NOTE: this assertion was already stale before M3.7 — the actual
         # count immediately prior to Monitoring's 10 new agents was 86,
         # not the 53 previously asserted here (last correctly updated
@@ -267,13 +267,17 @@ class TestAgentRegistry:
         # M3.4-M3.6). Fixed here as part of M3.7's additive registration
         # of monitoring_head + 3 leads + 6 workers (86 + 10 = 96) — see
         # docs/M3.7_Monitoring_Service_Specification_v1.md §1.
-        assert len(AGENT_REGISTRY) == 96, \
-            f"Expected 96 agents, got {len(AGENT_REGISTRY)}"
+        #
+        # Bumped 96 -> 106 when Incident Response (M3.8) registered its 10 agents
+        # (96 + 10 = 106); tests/foundation/test_m39_platform_integration.py already
+        # asserts 106.
+        assert len(AGENT_REGISTRY) == 106, \
+            f"Expected 106 agents, got {len(AGENT_REGISTRY)}"
 
     def test_all_departments_represented(self):
         depts = {s.department for s in AGENT_REGISTRY.values()}
         expected = {"manager","product","architecture","engineering",
-                    "qa","security","devops","docs","monitoring"}
+                    "qa","security","devops","docs","monitoring","incident_response"}
         assert depts == expected
 
     def test_product_department_has_9_agents(self):
@@ -342,7 +346,11 @@ class TestFeatureAnalystWorker:
                     result = await agent.execute(sample_task)
 
         assert len(result.artifacts) >= 1
-        assert result.artifacts[0].get("artifact_type") == "feature_spec_doc"
+        # The mock artifact repo returns a fixed ref ("test_artifact") whatever it is
+        # asked for, and AgentResult.artifacts holds ArtifactRef models (not dicts),
+        # so assert on what the worker *requested* from the repository instead.
+        create_kwargs = infra["artifact_repo"].create.await_args.kwargs
+        assert create_kwargs["artifact_type"] == "feature_spec_doc"
 
 
 class TestRequirementsWriterWorker:

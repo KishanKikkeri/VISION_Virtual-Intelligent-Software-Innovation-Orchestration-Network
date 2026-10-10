@@ -33,6 +33,7 @@ from services.repository.managers.repository_manager import RepositoryManager
 from services.repository.providers.base_provider import BaseRepositoryProvider
 from services.repository.providers.github_provider import GitHubProvider
 from services.repository.schemas import (
+    RepositoryEventType,
     ApprovePullRequestRequest,
     BranchType,
     CommitFilesRequest,
@@ -733,7 +734,7 @@ class TestReleaseManagerIntegration:
             CreateReleaseRequest(project_id="proj-1", tag_name="v1.0.0")
         )
         assert release.tag_name == "v1.0.0"
-        assert any(e.event_type == "release.created" for e in tables.event.rows)
+        assert any(e.event_type == RepositoryEventType.RELEASE_CREATED.value for e in tables.event.rows)
 
     async def test_duplicate_tag_raises(self, tables):
         deps = make_deps()
@@ -753,7 +754,7 @@ class TestReleaseManagerIntegration:
             project_id="proj-1", tag_name="v1.0.0", reason="critical regression",
         ))
 
-        rollback_events = [e for e in tables.event.rows if e.event_type == "release.rollback"]
+        rollback_events = [e for e in tables.event.rows if e.event_type == RepositoryEventType.RELEASE_ROLLBACK.value]
         assert len(rollback_events) == 1
         assert rollback_events[0].payload["reason"] == "critical regression"
 

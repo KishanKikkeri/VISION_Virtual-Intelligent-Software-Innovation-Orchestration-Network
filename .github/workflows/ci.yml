@@ -15,6 +15,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Running `python benchmarks/runner.py` / `python services/.../release_cli.py`
+  # puts the *script's* directory on sys.path, not the repo root, so
+  # `import services...` fails without this. (pytest finds the root on its own
+  # because tests/ is a package.)
+  PYTHONPATH: ${{ github.workspace }}
+
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
@@ -26,8 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest pytest-asyncio pydantic fastapi sqlalchemy aiosqlite httpx pyyaml
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements-dev.txt
       - name: Run unit tests
         run: pytest tests/ -q
 
@@ -40,7 +46,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install pydantic fastapi sqlalchemy
+        run: pip install -r requirements.txt
       - name: Run benchmark suite
         run: python benchmarks/runner.py
       - uses: actions/upload-artifact@v4
@@ -59,7 +65,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install pydantic fastapi sqlalchemy
+        run: pip install -r requirements.txt
       - name: Run release readiness check
         run: |
           python services/integration/release_validation/release_cli.py check "$(cat release/VERSION)" \
@@ -76,7 +82,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install pydantic fastapi sqlalchemy
+        run: pip install -r requirements.txt
       - name: Generate documentation
         run: python services/integration/release_validation/release_cli.py docs
       - uses: actions/upload-artifact@v4
@@ -93,7 +99,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install pydantic fastapi sqlalchemy
+        run: pip install -r requirements.txt
       - name: Build release manifest
         run: python services/integration/release_validation/release_cli.py package "$(cat release/VERSION)" || true
       - uses: actions/upload-artifact@v4

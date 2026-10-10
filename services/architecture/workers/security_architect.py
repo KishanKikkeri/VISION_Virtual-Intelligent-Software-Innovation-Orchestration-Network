@@ -21,12 +21,15 @@ class SecurityArchitectWorker(BaseAgent):
         bp   = ctx.get_artifact("architecture_blueprint", {})
         api  = ctx.get_artifact("api_spec", {})
         services = bp.get("services", []) if isinstance(bp, dict) else []
+        # Computed outside the f-string below: nesting {} / {{}} inside a
+        # replacement field is a SyntaxError (and fragile across 3.11/3.12).
+        api_paths = list(api.get("paths", {}).keys())[:12] if isinstance(api, dict) else []
 
         sys = self.build_system_prompt(task)
         raw, usage = await self.call_llm(task, [{"role":"system","content":sys},{"role":"user","content":f"""Design the security architecture for this system.
 
 SERVICES: {json.dumps([s.get("name") for s in services], indent=2)}
-API ENDPOINTS: {json.dumps(list(api.get("paths",{{}}}}).keys())[:12] if isinstance(api,dict) else [], indent=2)}
+API ENDPOINTS: {json.dumps(api_paths, indent=2)}
 
 Return ONLY JSON:
 {{

@@ -212,10 +212,14 @@ class TestArtifactValidator:
 # ══════════════════════════════════════════════════════════════
 
 class TestEventRouter:
-    def test_manager_deploy_approved_is_a_dead_subscription(self):
+    def test_manager_deploy_approved_dead_subscription_was_removed(self):
+        """Regression: DevOps used to subscribe to `manager.deploy.approved`, which
+        nothing ever published. The subscription was removed in the messaging
+        cleanup pass (see event_router.py's module docstring)."""
         dead = event_router.find_dead_subscriptions()
         subjects = {f.subject for f in dead}
-        assert "manager.deploy.approved" in subjects
+        assert "manager.deploy.approved" not in subjects
+        assert dead == []
 
     def test_qa_phase_completed_is_not_orphan(self):
         orphans = {f.subject for f in event_router.find_orphan_events()}
@@ -225,17 +229,28 @@ class TestEventRouter:
         dupes = {f.subject for f in event_router.find_duplicate_consumers()}
         assert "engineering.phase.completed" in dupes
 
-    def test_qa_defect_created_is_a_missing_route(self):
+    def test_qa_defect_created_is_now_routed(self):
+        """Fixed: Monitoring's per-department `.>` wildcards now consume it."""
         missing = {f.subject for f in event_router.find_missing_routes()}
-        assert "qa.defect.created" in missing
+        assert "qa.defect.created" not in missing
 
-    def test_qa_retry_requested_is_a_missing_route(self):
+    def test_qa_retry_requested_is_now_routed(self):
         missing = {f.subject for f in event_router.find_missing_routes()}
-        assert "qa.retry.requested" in missing
+        assert "qa.retry.requested" not in missing
 
-    def test_branch_created_is_a_namespace_mismatch(self):
+    def test_branch_created_is_no_longer_a_namespace_mismatch(self):
+        """Fixed: Repository events are namespaced `repository.*`, so they match
+        Monitoring's `repository.>` wildcard."""
         mismatches = {f.subject for f in event_router.find_namespace_mismatches()}
-        assert "branch.created" in mismatches
+        assert "branch.created" not in mismatches
+        assert "repository.branch.created" in event_router.EVENT_MANIFEST
+
+    def test_unnamespaced_devops_events_remain_flagged(self):
+        """Known, documented follow-up (event_router.py docstring): DevOps's own
+        events are still un-namespaced orphans."""
+        mismatches = {f.subject for f in event_router.find_namespace_mismatches()}
+        assert mismatches == {"deployment.completed", "deployment.failed",
+                              "health.completed", "rollback.completed"}
 
     def test_repository_created_matches_wildcard(self):
         assert event_router._matches_wildcard("repository.created")
@@ -249,14 +264,16 @@ class TestEventRouter:
         assert flagged + len(r.healthy_subjects) <= r.total_subjects + len(r.namespace_mismatches)
         # namespace_mismatches overlap with orphan classification by design (both apply to branch.created etc.)
 
-    def test_generate_event_report_finds_at_least_one_of_each_kind(self):
+    def test_generate_event_report_finds_remaining_kinds_and_none_of_the_fixed_ones(self):
         r = event_router.generate_event_report()
+        # Still present (tracked, not yet fixed):
         assert len(r.orphan_events) > 0
-        assert len(r.dead_subscriptions) > 0
-        assert len(r.missing_routes) > 0
         assert len(r.namespace_mismatches) > 0
         assert len(r.duplicate_consumers) > 0
         assert len(r.healthy_subjects) > 0
+        # Fixed by the messaging cleanup pass:
+        assert r.dead_subscriptions == []
+        assert r.missing_routes == []
 
     def test_monitoring_incident_is_healthy(self):
         r = event_router.generate_event_report()
@@ -324,13 +341,13 @@ class TestLifecycleRealPlatform:
         for name, r in results.items():
             assert r.built, f"{name} failed to build: {r.error}"
 
-    def test_qa_dlq_node_is_a_genuine_unreachable_finding(self):
-        """Regression test for the real bug discovered during M3.9
-        reconnaissance: QA's `dlq` node has no incoming edge anywhere
-        in services/qa/workflows/qa_graph.py."""
+    def test_qa_dlq_node_is_reachable(self):
+        """Regression test for the bug discovered during M3.9 reconnaissance
+        (QA's `dlq` node had no incoming edge). Fixed in M3.10 — it must stay
+        reachable."""
         results = lifecycle.validate_all_workflows()
-        assert not results["qa"].passed
-        assert "dlq" in results["qa"].unreachable_nodes
+        assert results["qa"].passed
+        assert "dlq" not in results["qa"].unreachable_nodes
 
     def test_architecture_parallel_nodes_are_dynamic_not_unreachable(self):
         """Regression test for the Send()-heuristic: these 3 nodes must
@@ -340,10 +357,10 @@ class TestLifecycleRealPlatform:
         assert set(results["architecture"].likely_dynamic_dispatch_nodes) == {
             "parallel_integration", "parallel_scaling", "parallel_security"}
 
-    def test_nine_of_ten_graphs_pass(self):
+    def test_ten_of_ten_graphs_pass(self):
         results = lifecycle.validate_all_workflows()
         passing = sum(1 for r in results.values() if r.passed)
-        assert passing == 9  # only qa fails, on the genuine dlq finding
+        assert passing == 10  # qa's dlq node was fixed in M3.10
 
     def test_every_graph_reaches_end(self):
         results = lifecycle.validate_all_workflows()
@@ -685,14 +702,14 @@ class TestFullPlatformValidation:
         assert full.registry.total_agents == 106
         assert full.registry.passed
         assert len(full.workflows) == 10
-        assert sum(1 for w in full.workflows.values() if w.passed) == 9
+        assert sum(1 for w in full.workflows.values() if w.passed) == 10
         assert full.events.total_subjects > 40
         assert full.readiness.overall > 0
 
     @pytest.mark.asyncio
     async def test_readiness_reflects_genuine_findings_not_perfect_score(self):
-        """The platform has real, documented findings (QA's dlq node,
-        several orphan/dead NATS subjects) — a perfectly clean 100%
+        """The platform still has real, documented findings (the un-namespaced
+        DevOps NATS events, duplicate consumers) — a perfectly clean 100%
         readiness score would indicate this validator isn't actually
         checking anything."""
         factory = make_factory()
@@ -705,4 +722,4 @@ class TestFullPlatformValidation:
         full = await generate_full_report(factory=factory)
         categories = {c.name: c.score for c in full.readiness.categories}
         assert categories["registry"] == 100.0  # registry itself is clean
-        assert categories["workflows"] == 90.0   # 9/10 graphs pass
+        assert categories["workflows"] == 100.0  # 10/10 graphs pass

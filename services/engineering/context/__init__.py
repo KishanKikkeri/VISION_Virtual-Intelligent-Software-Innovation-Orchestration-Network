@@ -90,16 +90,34 @@ def build_implementation_plan(
         id_by_worker[worker_id] = task.task_id
         plan.tasks.append(task)
 
-    for w in BACKEND_WORKERS:
-        _add(EngineeringTeam.BACKEND, w, _BACKEND_DEPS.get(w, []))
+    def _add_team(team: EngineeringTeam, workers: List[str], deps_map: Dict[str, List[str]]) -> None:
+        """Add `workers` so that every worker's dependencies exist before it.
+
+        _add() resolves depends_on via id_by_worker and silently drops anything
+        not created yet, so the order matters: FRONTEND_WORKERS lists page_worker
+        *before* routing_worker/state_management_worker, which used to lose those
+        edges. Walk dependencies first; otherwise preserve the listed order.
+        """
+        in_team = set(workers)
+
+        def visit(w: str) -> None:
+            if w in id_by_worker:
+                return
+            for d in deps_map.get(w, []):
+                if d in in_team:
+                    visit(d)
+            _add(team, w, deps_map.get(w, []))
+
+        for w in workers:
+            visit(w)
+
+    _add_team(EngineeringTeam.BACKEND, BACKEND_WORKERS, _BACKEND_DEPS)
 
     has_ui_blueprint = bool(architecture_refs.get("ui_blueprint"))
     if include_frontend and has_ui_blueprint:
-        for w in FRONTEND_WORKERS:
-            _add(EngineeringTeam.FRONTEND, w, _FRONTEND_DEPS.get(w, []))
+        _add_team(EngineeringTeam.FRONTEND, FRONTEND_WORKERS, _FRONTEND_DEPS)
 
-    for w in INTEGRATION_WORKERS:
-        _add(EngineeringTeam.INTEGRATION, w, _INTEGRATION_DEPS.get(w, []))
+    _add_team(EngineeringTeam.INTEGRATION, INTEGRATION_WORKERS, _INTEGRATION_DEPS)
 
     return plan
 

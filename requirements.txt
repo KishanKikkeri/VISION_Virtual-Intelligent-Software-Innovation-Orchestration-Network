@@ -1,0 +1,37 @@
+# Runtime dependencies for the VISION / AASC platform.
+# Derived from the third-party imports actually present in the repo.
+# `pip install -r requirements.txt` is what CI uses (see .github/workflows/).
+
+# --- web / API ---
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+
+# --- data / config ---
+pydantic>=2.6
+pydantic-settings>=2.2
+sqlalchemy[asyncio]>=2.0      # [asyncio] pulls in greenlet, required by sqlalchemy.ext.asyncio
+asyncpg>=0.29            # postgresql+asyncpg:// (see core/config/settings.py)
+alembic>=1.13
+pyyaml>=6.0
+typing_extensions>=4.9
+
+# --- orchestration ---
+langgraph>=0.2
+
+# --- logging / observability / messaging (hard imports) ---
+structlog>=24.1
+prometheus-client>=0.20      # infrastructure/monitoring/telemetry.py
+opentelemetry-api>=1.24      # infrastructure/monitoring/telemetry.py
+opentelemetry-sdk>=1.24
+nats-py>=2.7                 # infrastructure/messaging/nats_client.py
+
+# --- auth ---
+python-jose[cryptography]>=3.3   # infrastructure/auth/jwt_auth.py
+passlib>=1.7.4
+
+# --- LLM providers: lazily imported inside core/llm/providers/*, so install
+# only the one(s) you use:
+#   anthropic
+#   openai
+#   google-generativeai

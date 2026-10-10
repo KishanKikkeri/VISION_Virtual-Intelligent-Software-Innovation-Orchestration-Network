@@ -102,6 +102,28 @@ def extract_dependencies_from_source(files: List[Dict[str, str]]) -> List[Dict[s
                         deps.append({"name": name, "version": version, "ecosystem": "pypi"})
 
         elif name_lower == "package.json":
+            # Prefer real JSON parsing: the line-based fallback below skips a
+            # `"dependencies": {...}` block that sits on a single line (minified
+            # package.json), silently dropping those npm dependencies.
+            try:
+                manifest = json.loads(content)
+            except ValueError:
+                manifest = None
+            if isinstance(manifest, dict):
+                for block in ("dependencies", "devDependencies"):
+                    entries = manifest.get(block)
+                    if not isinstance(entries, dict):
+                        continue
+                    for name, version in entries.items():
+                        if not isinstance(version, str):
+                            continue
+                        key = ("npm", name.lower())
+                        if key not in seen:
+                            seen.add(key)
+                            deps.append({"name": name, "version": version.lstrip("^~"), "ecosystem": "npm"})
+                continue
+
+            # Fallback for content that is not valid JSON (best-effort, as before).
             in_deps_block = False
             for line in content.splitlines():
                 if '"dependencies"' in line or '"devDependencies"' in line:
