@@ -160,7 +160,7 @@ def write_all_docs(output_dir: str = "docs/workflows") -> List[str]:
     for name in names:
         report = analyze_workflow(name, *graph_exporter._resolve_builder(name))  # noqa: SLF001
         doc_path = out / f"{name}.md"
-        doc_path.write_text(render_workflow_doc(name))
+        doc_path.write_text(render_workflow_doc(name), encoding="utf-8")
         written.append(str(doc_path))
         purpose_short = WORKFLOW_PURPOSE.get(name, "—")
         if len(purpose_short) > 60:
@@ -180,6 +180,6 @@ def write_all_docs(output_dir: str = "docs/workflows") -> List[str]:
         "`manager_delegation` — rather than a single `manager` entry._"
     )
     index_path = out / "workflow_index.md"
-    index_path.write_text("\n".join(index_rows) + "\n")
+    index_path.write_text("\n".join(index_rows) + "\n", encoding="utf-8")
     written.append(str(index_path))
     return written
