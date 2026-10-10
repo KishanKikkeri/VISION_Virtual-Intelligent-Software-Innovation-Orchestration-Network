@@ -200,6 +200,26 @@ class ProductionSummary(BaseModel):
     latest_environment_status: Optional[str] = None
 
 
+class PluginSandboxSummary(BaseModel):
+    """M5.1 Dashboard Integration — the "Plugin Sandbox" card's data
+    (brief's §"Dashboard": healthy, execution mode, violations,
+    timeouts, failures, average runtime). A thin re-projection of
+    `sandbox_monitor.SandboxMonitor.dashboard_summary()`'s
+    `SandboxDashboardSummary` (defined in `plugin_sdk/sandbox/
+    sandbox_models.py`, not duplicated here) into this package's own
+    card-model family, matching every other card in this file. Optional
+    and additive, same convention `ReleaseSummary`/`ChaosSummary`/...
+    established — a platform with no sandbox execution yet simply
+    omits this card."""
+    healthy: bool = True
+    execution_mode: str = "none"
+    total_executions: int = 0
+    violation_count: int = 0
+    timeout_count: int = 0
+    failure_count: int = 0
+    average_runtime_ms: float = 0.0
+
+
 class ReleaseSummary(BaseModel):
     """M4.10 Dashboard Integration — the Final Release card's data
     (§3 "Release section"): readiness score, workflow count, plugin
@@ -246,4 +266,5 @@ class PlatformDashboard(BaseModel):
     designer: Optional[DesignerSummary] = None
     production: Optional[ProductionSummary] = None
     release: Optional[ReleaseSummary] = None
+    plugin_sandbox: Optional[PluginSandboxSummary] = None
     degraded_sections: List[str] = Field(default_factory=list)

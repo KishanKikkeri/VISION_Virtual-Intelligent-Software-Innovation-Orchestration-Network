@@ -1,0 +1,131 @@
+/* static/designer/designer.css
+ * M4.8 §14 Browser UI — dark theme, matches the visual quality target
+ * set by the Operations Dashboard (brief's own wording). No build step:
+ * plain CSS, no preprocessor.
+ */
+:root {
+  --bg: #0f1115;
+  --panel: #161922;
+  --panel-alt: #1d212c;
+  --border: #2a2f3a;
+  --text: #e6e8ee;
+  --text-dim: #8a90a2;
+  --accent: #5b8cff;
+  --accent-dim: #33406b;
+  --ok: #3ecf8e;
+  --warn: #e8b339;
+  --error: #ef5c5c;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  grid-template-rows: 48px 1fr 160px;
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "palette canvas   props"
+    "palette validation props";
+  height: 100vh;
+}
+
+#toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+#toolbar .title { font-weight: 600; margin-right: 12px; }
+#toolbar button, #toolbar input, #toolbar select {
+  background: var(--panel-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#toolbar button:hover { border-color: var(--accent); }
+#toolbar .spacer { flex: 1; }
+#autosave-indicator { color: var(--text-dim); font-size: 11px; }
+#autosave-indicator.dirty { color: var(--warn); }
+
+#palette {
+  grid-area: palette;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px;
+}
+#palette input.search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.palette-category { color: var(--text-dim); text-transform: uppercase; font-size: 10px; margin: 10px 0 4px; }
+.palette-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--radius);
+  cursor: grab; margin-bottom: 2px; border: 1px solid transparent;
+}
+.palette-item:hover { background: var(--panel-alt); border-color: var(--border); }
+
+#canvas-wrap {
+  grid-area: canvas;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle, #1a1e28 1px, transparent 1px) 0 0/20px 20px, var(--bg);
+}
+#canvas { width: 100%; height: 100%; }
+#minimap {
+  position: absolute; bottom: 8px; right: 8px;
+  width: 140px; height: 100px;
+  background: rgba(22,25,34,0.9); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.node-rect { fill: var(--panel-alt); stroke: var(--border); stroke-width: 1.5; rx: 8; }
+.node-rect.selected { stroke: var(--accent); stroke-width: 2; }
+.node-rect.replay-current { stroke: var(--ok); stroke-width: 2.5; }
+.node-rect.replay-failed { stroke: var(--error); stroke-width: 2.5; }
+.node-label { fill: var(--text); font-size: 11px; pointer-events: none; }
+.edge-line { stroke: var(--text-dim); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+.edge-line.selected { stroke: var(--accent); }
+
+#props {
+  grid-area: props;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 10px;
+}
+#props label { display: block; color: var(--text-dim); font-size: 11px; margin-top: 8px; }
+#props input, #props textarea, #props select {
+  width: 100%; background: var(--panel-alt); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 5px;
+}
+
+#validation {
+  grid-area: validation;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px;
+}
+.validation-issue { padding: 4px 6px; border-radius: var(--radius); margin-bottom: 4px; font-size: 12px; }
+.validation-issue.error { background: rgba(239,92,92,0.12); color: var(--error); }
+.validation-issue.warning { background: rgba(232,179,57,0.12); color: var(--warn); }
+.validation-ok { color: var(--ok); }

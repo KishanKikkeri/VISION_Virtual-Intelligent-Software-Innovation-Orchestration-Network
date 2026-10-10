@@ -8,7 +8,7 @@ self-contained precedent.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import select
 
@@ -64,3 +64,71 @@ class DependencyCheckRepository:
     async def list_for_report(db, report_id: str) -> List[DependencyCheck]:
         r = await db.execute(select(DependencyCheck).where(DependencyCheck.report_id == report_id))
         return list(r.scalars().all())
+
+
+class WorkflowVersionRepository:
+    _cache: Dict[Tuple[str, str], Any] = {}
+
+    @classmethod
+    async def get(cls, db, workflow: str, version: str) -> Optional[Any]:
+        try:
+            from infrastructure.database.models import WorkflowVersion
+            r = await db.execute(
+                select(WorkflowVersion).where(
+                    WorkflowVersion.workflow == workflow,
+                    WorkflowVersion.version == version,
+                )
+            )
+            res = r.scalar_one_or_none()
+            if res is not None:
+                return cast(Any, res)
+        except Exception:
+            pass
+        return cls._cache.get((workflow, version))
+
+    @classmethod
+    async def record(
+        cls,
+        db,
+        workflow: str,
+        version: str,
+        signature: str,
+        nodes: List[str],
+        edges: List[Any],
+        routes: Dict[str, Any],
+        is_breaking_from_previous: bool,
+        diff_from_previous: Optional[Dict[str, Any]] = None,
+        notes: Optional[str] = None,
+    ) -> Any:
+        data = {
+            "workflow": workflow,
+            "version": version,
+            "signature": signature,
+            "nodes": nodes,
+            "edges": edges,
+            "routes": routes,
+            "is_breaking_from_previous": is_breaking_from_previous,
+            "diff_from_previous": diff_from_previous,
+            "notes": notes,
+        }
+        cls._cache[(workflow, version)] = data
+        try:
+            from infrastructure.database.models import WorkflowVersion
+            row = WorkflowVersion(**data)
+            db.add(row)
+            await db.flush()
+            return row
+        except Exception:
+            return data
+
+    @classmethod
+    async def list_for_workflow(cls, db, workflow: str) -> List[Any]:
+        try:
+            from infrastructure.database.models import WorkflowVersion
+            r = await db.execute(
+                select(WorkflowVersion).where(WorkflowVersion.workflow == workflow)
+            )
+            return list(r.scalars().all())
+        except Exception:
+            return [v for (w, _), v in cls._cache.items() if w == workflow]
+

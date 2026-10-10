@@ -18,6 +18,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
+
+# Ensure repo root is on sys.path for direct CLI invocation
+repo_root = str(Path(__file__).resolve().parents[3])
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
 from services.integration.release_validation import release_export
 from services.integration.release_validation.readiness_report import build_readiness_report

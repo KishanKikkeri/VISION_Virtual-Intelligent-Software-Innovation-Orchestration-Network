@@ -1,0 +1,10 @@
+{
+  "id": "notification_plugin",
+  "name": "Notification Plugin",
+  "version": "1.0.0",
+  "author": "AASC Platform Team",
+  "description": "M4.10 §6 sample plugin — demonstrates the 'network' permission with a pluggable notification sink, reacting to incident_created and deployment_completed hooks.",
+  "entrypoint": "plugin.py",
+  "permissions": ["network", "events"],
+  "hooks": ["incident_created", "deployment_completed"]
+}

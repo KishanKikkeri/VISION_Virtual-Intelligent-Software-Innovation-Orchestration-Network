@@ -18,6 +18,11 @@ import shutil
 import socket
 import subprocess
 import sys
+from pathlib import Path
+
+repo_root = str(Path(__file__).resolve().parents[2])
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
 from services.integration.release_validation.release_validation_models import CheckStatus, InstallCheckResult, InstallReport
 

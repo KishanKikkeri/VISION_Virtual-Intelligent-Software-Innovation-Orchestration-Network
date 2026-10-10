@@ -26,7 +26,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0011_plugin_sdk"
-down_revision = "0010_security_hardening"  # NOTE: confirm/replace against the real head — see module docstring
+down_revision = "0009_chaos_testing"
 branch_labels = None
 depends_on = None
 

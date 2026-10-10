@@ -18,16 +18,15 @@ from typing import Optional
 import structlog
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from core.config.settings import get_settings
 
 log = structlog.get_logger(__name__)
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_bearer      = HTTPBearer(auto_error=True)
+_bearer = HTTPBearer(auto_error=True)
 
 
 # ── Schemas ───────────────────────────────────────────────────
@@ -62,11 +61,20 @@ class LoginRequest(BaseModel):
 # ── Password utilities ────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    pw_bytes = plain.encode("utf-8")
+    if len(pw_bytes) > 72:
+        pw_bytes = pw_bytes[:72]
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    try:
+        pw_bytes = plain.encode("utf-8")
+        if len(pw_bytes) > 72:
+            pw_bytes = pw_bytes[:72]
+        return bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 # ── Token creation ────────────────────────────────────────────

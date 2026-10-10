@@ -23,8 +23,15 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sys
 import time
+from pathlib import Path
 from typing import Callable, Dict, Optional
+
+# Ensure repo root is on sys.path for direct CLI invocation
+repo_root = str(Path(__file__).resolve().parent.parent)
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
 from services.integration.release_validation.benchmark_summary import build_benchmark_summary, summary_markdown
 from services.integration.release_validation.release_validation_models import BenchmarkSummaryReport

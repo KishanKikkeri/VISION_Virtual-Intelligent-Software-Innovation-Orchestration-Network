@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0-rc1",
+  "entries": [
+    {
+      "path": "release/CHANGELOG.md",
+      "kind": "changelog",
+      "present": true,
+      "checksum": "62b4cc6662efc273ea2d1cd2fd92bb1641f16b9536576477c60dca1d9ce4199f"
+    },
+    {
+      "path": "release/RELEASE_NOTES.md",
+      "kind": "release_notes",
+      "present": true,
+      "checksum": "057e75775af07fef3781eaf56a34aa29039a995f5983668c2f5011f68c360831"
+    },
+    {
+      "path": "release/LICENSE",
+      "kind": "license",
+      "present": true,
+      "checksum": "174c9325281dec377ef81ffcb201b9bb8d8512dd61661bbe32612044692e015a"
+    },
+    {
+      "path": "release/NOTICE",
+      "kind": "notice",
+      "present": true,
+      "checksum": "69ba8850ab4a0f3fbea402ed40d1d5f4af2c46b866719a5b5e485147a48cf738"
+    },
+    {
+      "path": "release/VERSION",
+      "kind": "version",
+      "present": true,
+      "checksum": "627c3715dbd8d4505f82d6d11a9c6a4ddf7a5107360578e30ce6bafc1c150d56"
+    },
+    {
+      "path": "docs/generated",
+      "kind": "docs",
+      "present": true,
+      "checksum": null
+    },
+    {
+      "path": "benchmarks/benchmark.json",
+      "kind": "benchmark",
+      "present": true,
+      "checksum": "1f8ed450881c21f4aac6a6f02f6f6e45df6af549da26bacab3986605b2a24c8c"
+    }
+  ],
+  "generated_at": "2026-07-19T15:08:59.374079+00:00"
+}

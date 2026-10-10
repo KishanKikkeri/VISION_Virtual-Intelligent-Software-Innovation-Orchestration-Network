@@ -50,6 +50,9 @@ logs/
 *.code-workspace
 .DS_Store
 Thumbs.db
+
+# Ingestion / temporary drops
+M5_1_Plugin_Sandboxing/
 Desktop.ini
 
 # Local tooling

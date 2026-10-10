@@ -1,0 +1,11 @@
+Copyright (c) 2026 the AASC Platform contributors.
+
+All rights reserved.
+
+This file is a placeholder. The M4.10 brief calls for a `LICENSE` file
+under `release/` but does not specify a license; no earlier milestone
+handover in this slice specifies one either. Before this ships as a
+public or externally-distributed release, replace this file with the
+license the project owner actually intends (e.g. MIT, Apache-2.0, or a
+proprietary/internal-use license) — see
+`docs/M4.10_Final_Release_Handover.md` §4 for this call-out.

@@ -1,0 +1,11 @@
+AASC Platform
+Copyright (c) 2026 the AASC Platform contributors.
+
+This product includes third-party open-source software. Third-party
+license texts are the responsibility of each dependency listed in
+`requirements.txt` / `deploy/docker/Dockerfile`; no `requirements.txt`
+is present in this build's slice of the repository to enumerate here
+(see `docs/M4.10_Final_Release_Handover.md` §4) — a real release build
+should generate this section from the platform's real dependency
+manifest and, where available, the M4.6 SBOM output
+(`release_manager.attach_sbom`).

@@ -67,6 +67,14 @@ class TestAuth:
         assert verify_password(plain, hashed) is True
         assert verify_password("wrong-password", hashed) is False
 
+    def test_password_hash_and_verify_long_password(self):
+        long_plain = "a" * 150
+        hashed = hash_password(long_plain)
+        assert hashed != long_plain
+        assert verify_password(long_plain, hashed) is True
+        assert verify_password("a" * 150, hashed) is True
+        assert verify_password("b" * 150, hashed) is False
+
     def test_access_token_create_and_decode(self, monkeypatch):
         monkeypatch.setenv("JWT_SECRET", "a" * 32)
         monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@h/db")

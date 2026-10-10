@@ -1,0 +1,10 @@
+{
+  "id": "metrics_plugin",
+  "name": "Metrics Plugin",
+  "version": "1.0.0",
+  "author": "AASC Platform Team",
+  "description": "M4.10 §6 sample plugin — demonstrates the 'read' permission and an in-memory counter accumulated across before/after agent-run hooks, exposed via a dashboard_section hook.",
+  "entrypoint": "plugin.py",
+  "permissions": ["read"],
+  "hooks": ["before_agent_run", "after_agent_run", "dashboard_section"]
+}

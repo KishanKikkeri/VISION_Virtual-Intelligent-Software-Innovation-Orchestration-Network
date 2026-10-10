@@ -25,8 +25,8 @@ from typing import Any, Dict, List, Optional
 
 from services.integration.dashboard.dashboard_models import (
     ChaosSummary, DashboardSummary, DesignerSummary, EventStreamItem, IncidentSummary, MetricsSnapshot,
-    PlatformDashboard, PluginsSummary, ProductionSummary, ReleaseSummary, SecuritySummary, ServiceStatus,
-    VersionSummary, WorkflowStatusEntry,
+    PlatformDashboard, PluginSandboxSummary, PluginsSummary, ProductionSummary, ReleaseSummary, SecuritySummary,
+    ServiceStatus, VersionSummary, WorkflowStatusEntry,
 )
 
 _ERROR_HINTS = ("fail", "error", "reject", "crash", "denied")
@@ -388,6 +388,25 @@ def build_release_summary(raw: Optional[Dict[str, Any]]) -> Optional["ReleaseSum
     )
 
 
+def build_plugin_sandbox_summary(raw: Optional[Dict[str, Any]]) -> Optional["PluginSandboxSummary"]:
+    """M5.1 Dashboard Integration — turns a plain dict (as produced by
+    `sandbox_monitor.SandboxMonitor.dashboard_summary().model_dump()`)
+    into the Plugin Sandbox card. `raw=None` yields `None`, same
+    "missing card, not a broken dashboard" convention every prior M4.x/
+    M5.x summary builder in this module follows."""
+    if raw is None:
+        return None
+    return PluginSandboxSummary(
+        healthy=raw.get("healthy", True),
+        execution_mode=raw.get("execution_mode", "none"),
+        total_executions=raw.get("total_executions", 0),
+        violation_count=raw.get("violation_count", 0),
+        timeout_count=raw.get("timeout_count", 0),
+        failure_count=raw.get("failure_count", 0),
+        average_runtime_ms=raw.get("average_runtime_ms", 0.0),
+    )
+
+
 def assemble_platform_dashboard(
     services: List[ServiceStatus],
     workflows: List[WorkflowStatusEntry],
@@ -405,6 +424,7 @@ def assemble_platform_dashboard(
     designer: Optional[DesignerSummary] = None,
     production: Optional[ProductionSummary] = None,
     release: Optional[ReleaseSummary] = None,
+    plugin_sandbox: Optional[PluginSandboxSummary] = None,
 ) -> PlatformDashboard:
     degraded_sections = degraded_sections or []
     summary = build_dashboard_summary(
@@ -427,5 +447,6 @@ def assemble_platform_dashboard(
         designer=designer,
         production=production,
         release=release,
+        plugin_sandbox=plugin_sandbox,
         degraded_sections=degraded_sections,
     )

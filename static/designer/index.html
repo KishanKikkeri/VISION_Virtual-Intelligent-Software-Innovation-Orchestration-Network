@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AASC — Workflow Designer</title>
+  <link rel="stylesheet" href="designer.css">
+</head>
+<body>
+  <div id="app">
+    <div id="toolbar">
+      <div class="title">Workflow Designer</div>
+      <button id="btn-undo">Undo</button>
+      <button id="btn-redo">Redo</button>
+      <button id="btn-save">Save</button>
+      <button id="btn-export-json">Export JSON</button>
+      <button id="btn-export-mermaid">Export Mermaid</button>
+      <div class="spacer"></div>
+      <span id="autosave-indicator">Saved</span>
+    </div>
+
+    <div id="palette">
+      <input class="search" id="palette-search" placeholder="Search nodes…">
+      <div id="palette-list"></div>
+    </div>
+
+    <div id="canvas-wrap">
+      <svg id="canvas"></svg>
+      <div id="minimap"></div>
+    </div>
+
+    <div id="props"></div>
+    <div id="validation"></div>
+  </div>
+
+  <script src="designer.js"></script>
+</body>
+</html>

@@ -19,9 +19,15 @@ from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, ForeignKey,
     Integer, Numeric, String, Text, UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy import JSON as sa_JSON
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, JSONB as PG_JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
+JSONB = PG_JSONB().with_variant(sa_JSON(), "sqlite")
+
+def ARRAY(item_type, *args, **kwargs):
+    return PG_ARRAY(item_type, *args, **kwargs).with_variant(sa_JSON(), "sqlite")
 
 from infrastructure.database.connection import Base
 

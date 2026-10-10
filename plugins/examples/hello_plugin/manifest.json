@@ -1,0 +1,10 @@
+{
+  "id": "hello_plugin",
+  "name": "Hello Plugin",
+  "version": "1.0.0",
+  "author": "AASC Platform Team",
+  "description": "M4.10 §6 sample plugin — the minimal end-to-end example: one hook, no permissions, startup/shutdown lifecycle.",
+  "entrypoint": "plugin.py",
+  "permissions": [],
+  "hooks": ["startup", "shutdown", "after_workflow"]
+}
